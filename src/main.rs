@@ -66,7 +66,7 @@ fn main(){
     // If the user entered a hostname, add it to /etc/hosts
     if !hostname.is_empty() {
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
-        let grep_pattern = format!("({})\\s({})", ip_address, hostname);
+        let grep_pattern = format!("({})\\s({})$", ip_address, hostname);
         // Run the grep command
         let grep = Command::new("grep")
                        .arg("-E")
@@ -81,7 +81,7 @@ fn main(){
 
         // If grep is empty, then the pair wasn't in /etc/hosts, so add it
         if grep.is_empty() {
-            // Obtain a file handle with write to /etc/hosts
+            // Obtain a file handle with appending write to /etc/hosts
             let mut file_handle = OpenOptions::new()
                                               .append(true)
                                               .open("/etc/hosts")

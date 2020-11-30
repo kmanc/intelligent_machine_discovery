@@ -64,20 +64,34 @@ fn main(){
     }));
 
     // If the user entered a hostname, add it to /etc/hosts
-    if hostname.is_empty() {
-        // Format a string if IP address and hostname and add it to /etc/hosts
-        let combo = format!("{} {}", ip_address, hostname);
-        // Also let the user know you did that for them
-        println!("Adding \"{}\" to /etc/hosts and running additional discovery", combo);
-        /*
-        UNCOMMENT THIS WHEN YOURE READY BUT FOR THE TIME BEING THIS SAVES ENERGY
-        let mut file = OpenOptions::new()
-                                   .append(true)
-                                   .open("/etc/hosts")
-                                   .expect("Could obtain a handle to /etc/hosts");
-        writeln!(file, "{}", combo);
-        */
-        println!("\tDone!");
+    if !hostname.is_empty() {
+        // Create a pattern to see if the IP/hostname pair is in /etc/hosts
+        let grep_pattern = format!("({})\\s({})", ip_address, hostname);
+        // Run the grep command
+        let grep = Command::new("grep")
+                       .arg("-E")
+                       .arg(grep_pattern)
+                       .arg("/etc/hosts")
+                       .output()
+                       .expect("Failed to run the grep command");
+        // Capture the grep output
+        let grep = grep.stdout;
+        // Convert it to a string
+        let grep = String::from_utf8(grep).unwrap();
+
+        // If grep is empty, then the pair wasn't in /etc/hosts, so add it
+        if grep.is_empty() {
+            // Obtain a file handle with write to /etc/hosts
+            let mut file_handle = OpenOptions::new()
+                                              .append(true)
+                                              .open("/etc/hosts")
+                                              .expect("Could obtain a handle to /etc/hosts");
+            // Let the user know you are writing the IP/hostname pair to /etc/hosts
+            println!("Adding \"{} {}\" to /etc/hosts and running additional discovery", &ip_address, &hostname);
+            // Write the IP/hostname pair to /etc/hosts
+            writeln!(&file_handle, "{} {}", &ip_address, &hostname);
+            println!("\tDone!");
+        }
     }
 
     // Run a basic nmap scan with service discovery and OS fingerprinting
@@ -340,27 +354,10 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 }
 
 
-fn webpage_scanning() {
-    let filename = "blah.txt";
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
-    let file_handle = OpenOptions::new()
-                                   .write(true)
-                                   .open(&filename)
-                                   .expect(&handle_error_message);
-
-    Command::new("ls")
-            .stdout(file_handle)
-            .output()
-            .expect("ls command failed to start");
-    println!("Web stuffs");
-}
-
-
 fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
     create_output_file(username, &filename);
 
-        // Prep an error string in case the file handle can't be obtained
+    // Prep an error string in case the file handle can't be obtained
     let handle_error_message = format!("Failed to obtain handle to file {}", filename);
 
     // Obtain a file handle with write permissions
@@ -377,4 +374,21 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
             .output()
             .expect("ls command failed to start");
     println!("TCP all done");
+}
+
+
+fn webpage_scanning() {
+    let filename = "blah.txt";
+    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
+
+    let file_handle = OpenOptions::new()
+                                   .write(true)
+                                   .open(&filename)
+                                   .expect(&handle_error_message);
+
+    Command::new("ls")
+            .stdout(file_handle)
+            .output()
+            .expect("ls command failed to start");
+    println!("Web stuffs");
 }

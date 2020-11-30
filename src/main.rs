@@ -378,17 +378,5 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
 
 
 fn webpage_scanning() {
-    let filename = "blah.txt";
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
-    let file_handle = OpenOptions::new()
-                                   .write(true)
-                                   .open(&filename)
-                                   .expect(&handle_error_message);
-
-    Command::new("ls")
-            .stdout(file_handle)
-            .output()
-            .expect("ls command failed to start");
     println!("Web stuffs");
 }

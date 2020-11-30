@@ -5,13 +5,12 @@
 
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{self, Write};
+use std::io::{Write};
 use std::io::{BufRead, BufReader};
 use std::net::{IpAddr};
 use std::process;
 use std::process::Command;
 use std::thread;
-use std::time::Duration;
 
 
 struct Arguments {
@@ -45,7 +44,7 @@ fn main(){
     ping_check(&ip_address);
     println!("\tDone!");
 
-    // Get the user associated with stdin for file permissions later
+    // Get the user associated with the active shell session for file permissions later
     let username = capture_username();
 
     // Create directory for storing things in
@@ -57,10 +56,20 @@ fn main(){
 
     // Spawn thread for nmap scan on all tcp ports
     println!("Kicking off thread for scanning all TCP ports");
+    // Clone variables so the thread can use them without borrowing/ttl issues
     let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
     let tcp_file = format!("{}/tcp_all_nmap", ip_address);
     threads.push(thread::spawn(move|| {
         run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+    }));
+
+    // Spawn thread for showmount scan
+    println!("Kicking off thread for listing NFS shares");
+    // Clone variables so the thread can use them without borrowing/ttl issues
+    let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
+    let showmount_file = format!("{}/nfs_shares", ip_address);
+    threads.push(thread::spawn(move|| {
+        run_showmount(&showmount_thread_username, &showmount_thread_ip, &showmount_file);
     }));
 
     // If the user entered a hostname, add it to /etc/hosts
@@ -82,10 +91,10 @@ fn main(){
         // If grep is empty, then the pair wasn't in /etc/hosts, so add it
         if grep.is_empty() {
             // Obtain a file handle with appending write to /etc/hosts
-            let mut file_handle = OpenOptions::new()
-                                              .append(true)
-                                              .open("/etc/hosts")
-                                              .expect("Could obtain a handle to /etc/hosts");
+            let file_handle = OpenOptions::new()
+                                          .append(true)
+                                          .open("/etc/hosts")
+                                          .expect("Could obtain a handle to /etc/hosts");
             // Let the user know you are writing the IP/hostname pair to /etc/hosts
             println!("Adding \"{} {}\" to /etc/hosts and running additional discovery", &ip_address, &hostname);
             // Write the IP/hostname pair to /etc/hosts
@@ -96,11 +105,8 @@ fn main(){
 
     // Run a basic nmap scan with service discovery and OS fingerprinting
     println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
-    ///*
-    //    UNCOMMENT THIS WHEN YOURE READY BUT FOR THE TIME BEING THIS SAVES ENERGY
     let basic_file = format!("{}/basic_nmap", ip_address);
-    run_basic_nmap(&username, &ip_address, &basic_file);
-    //*/
+    //run_basic_nmap(&username, &ip_address, &basic_file);
     println!("\tDone!");
 
     println!("Reading results from \"nmap -sV -O {}\" to determine next steps", ip_address);
@@ -121,9 +127,18 @@ fn main(){
     }
     println!("\tDone!");
 
-    threads.push(thread::spawn(|| {
-        webpage_scanning();
-    }));
+    // Make a vector of IP and hostname for easier iteration
+    for port in parsed_nmap.http.iter() {
+        let web_targets: Vec<String> = vec![ip_address.clone(), hostname.clone()];
+        for web_host in web_targets.iter() {
+            // Clone variables so the thread can use them without borrowing/ttl issues
+            let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
+            println!("Kicking off thread for scanning http presence on {}:{}", &web_host, &port);
+            threads.push(thread::spawn(move || {
+                run_web_scanning(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
+            }));
+        }
+    }
 
 
     // Wait for all outstanding threads to finish
@@ -291,7 +306,7 @@ fn run_basic_nmap(username: &str, target: &str, filename: &String) {
             .arg(target)
             .stdout(file_handle)
             .output()
-            .expect("ls command failed to start");
+            .expect("nmap command failed to run");
 }
 
 
@@ -366,17 +381,89 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
                                   .open(&filename)
                                   .expect(&handle_error_message);
 
-    // Run an nmap command with -sV and -O flags, and use the file handle for stdout
+    // Run an nmap command with -p-, and use the file handle for stdout
     Command::new("nmap")
             .arg("-p-")
             .arg(target)
             .stdout(file_handle)
             .output()
-            .expect("ls command failed to start");
+            .expect("nmap command failed to run");
     println!("TCP all done");
 }
 
 
-fn webpage_scanning() {
-    println!("Web stuffs");
+fn run_showmount(username: &str, target: &str, filename: &String) {
+    create_output_file(username, &filename);
+
+    // Prep an error string in case the file handle can't be obtained
+    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
+
+    // Obtain a file handle with write permissions
+    let file_handle = OpenOptions::new()
+                                  .write(true)
+                                  .open(&filename)
+                                  .expect(&handle_error_message);
+
+    // Run the showmount command with -e, and use the file handle for stdout
+    Command::new("showmount")
+            .arg("-e")
+            .arg(target)
+            .stdout(file_handle)
+            .output()
+            .expect("showmount command failed to run");
+    println!("showmount done");
+}
+
+fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) {
+    let filename = format!("{}/nikto_{}_{}", &ip_address, &target, &port);
+    create_output_file(username, &filename);
+
+    // Prep an error string in case the file handle can't be obtained
+    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
+
+    // Obtain a file handle with write permissions
+    let file_handle = OpenOptions::new()
+                                  .write(true)
+                                  .open(&filename)
+                                  .expect(&handle_error_message);
+
+    // Run the showmount command with -e, and use the file handle for stdout
+    Command::new("nikto")
+            .arg("-host")
+            .arg(&target)
+            .arg("-port")
+            .arg(&port)
+            .stdout(file_handle)
+            .output()
+            .expect("nikto command failed to run");
+    println!("\t{} done", filename);
+
+    let filename = format!("{}/gobuster_dirs_{}_{}", &ip_address, &target, &port);
+    create_output_file(username, &filename);
+
+    // Prep an error string in case the file handle can't be obtained
+    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
+
+    // Obtain a file handle with write permissions
+    let file_handle = OpenOptions::new()
+                                  .write(true)
+                                  .open(&filename)
+                                  .expect(&handle_error_message);
+
+    // Run the gobuster with a slew of flags
+    let gobuster_arg = format!("http://{}:{}", &target, &port);
+    Command::new("gobuster")
+            .arg("dir")
+            .arg("-q")
+            .arg("-t")
+            .arg("25")
+            .arg("-r")
+            .arg("-w")
+            .arg("/usr/share/wordlists/seclists/directory-list-2.3-small.txt")
+            .arg("-u")
+            .arg(&gobuster_arg)
+            .stdout(file_handle)
+            .output()
+            .expect("gobuster command failed to run");
+    println!("\t{} done", filename);
 }

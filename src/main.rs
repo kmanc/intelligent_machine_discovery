@@ -48,6 +48,21 @@ fn main(){
     // Get the user associated with stdin for file permissions later
     let username = capture_username();
 
+    // Create directory for storing things in
+    println!("Creating directory \"{}\" to store resulting files in", ip_address);
+    create_directory(&username, &ip_address);
+
+    // Create a vector for threads so we can keep track of them and join on them all at the end
+    let mut threads = Vec::new();
+
+    // Spawn thread for nmap scan on all tcp ports
+    println!("Kicking off thread for scanning all TCP ports");
+    let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
+    let tcp_file = format!("{}/tcp_all_nmap", ip_address);
+    threads.push(thread::spawn(move|| {
+        run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+    }));
+
     // If the user entered a hostname, add it to /etc/hosts
     if hostname.is_empty() {
         // Format a string if IP address and hostname and add it to /etc/hosts
@@ -65,19 +80,17 @@ fn main(){
         println!("\tDone!");
     }
 
-    // Create the basic nmap scan file, which will be used to determine what else to run
-    create_output_file(&username, "basic_nmap");
-
     // Run a basic nmap scan with service discovery and OS fingerprinting
     println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
-    /*
-        UNCOMMENT THIS WHEN YOURE READY BUT FOR THE TIME BEING THIS SAVES ENERGY
-    run_basic_nmap(&ip_address, "basic_nmap");
-    */
+    ///*
+    //    UNCOMMENT THIS WHEN YOURE READY BUT FOR THE TIME BEING THIS SAVES ENERGY
+    let basic_file = format!("{}/basic_nmap", ip_address);
+    run_basic_nmap(&username, &ip_address, &basic_file);
+    //*/
     println!("\tDone!");
 
     println!("Reading results from \"nmap -sV -O {}\" to determine next steps", ip_address);
-    let parsed_nmap = parse_basic_nmap("basic_nmap");
+    let parsed_nmap = parse_basic_nmap(&basic_file);
     // Report on all discovered ftp ports
     if !parsed_nmap.ftp.is_empty(){
         println!("\tFtp found on port(s) {:?}", &parsed_nmap.ftp)
@@ -94,16 +107,15 @@ fn main(){
     }
     println!("\tDone!");
 
-    let web_handle = thread::spawn(|| {
+    threads.push(thread::spawn(|| {
         webpage_scanning();
-    });
+    }));
 
-    let other_handle = thread::spawn(|| {
-        something_else();
-    });
 
-    web_handle.join().unwrap();
-    other_handle.join().unwrap();
+    // Wait for all outstanding threads to finish
+    for thread in threads {
+        thread.join().unwrap();
+    }
 }
 
 
@@ -215,7 +227,22 @@ fn capture_username() -> String {
 }
 
 
-fn create_output_file(username: &str, filename: &str) {
+fn create_directory(username: &str, directory: &str) {
+    // Prep an error string in case file creation fails for some reason
+    let create_error_message = format!("Failed to create new directory {}", directory);
+
+    // Create a file as the provided user with the desired name
+    Command::new("sudo")
+        .arg("-u")
+        .arg(username)
+        .arg("mkdir")
+        .arg(directory)
+        .output()
+        .expect(&create_error_message);
+}
+
+
+fn create_output_file(username: &str, filename: &String) {
     // Prep an error string in case file creation fails for some reason
     let create_error_message = format!("Failed to create new file {}", filename);
 
@@ -230,7 +257,10 @@ fn create_output_file(username: &str, filename: &str) {
 }
 
 
-fn run_basic_nmap(target: &str, filename: &str) {
+fn run_basic_nmap(username: &str, target: &str, filename: &String) {
+    // Create the basic nmap scan file, which will be used to determine what else to run
+    create_output_file(username, &filename);
+
     // Prep an error string in case the file handle can't be obtained
     let handle_error_message = format!("Failed to obtain handle to file {}", filename);
 
@@ -251,7 +281,7 @@ fn run_basic_nmap(target: &str, filename: &str) {
 }
 
 
-fn parse_basic_nmap(filename: &str) -> ServicePorts {
+fn parse_basic_nmap(filename: &String) -> ServicePorts {
     // Set an empty vector of ftp ports
     let mut ftp: Vec<String> = vec![];
     // Set an empty vector of http ports
@@ -327,7 +357,24 @@ fn webpage_scanning() {
 }
 
 
-fn something_else() {
-    thread::sleep(Duration::from_millis(500));
-    println!("That other thing");
+fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
+    create_output_file(username, &filename);
+
+        // Prep an error string in case the file handle can't be obtained
+    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
+
+    // Obtain a file handle with write permissions
+    let file_handle = OpenOptions::new()
+                                  .write(true)
+                                  .open(&filename)
+                                  .expect(&handle_error_message);
+
+    // Run an nmap command with -sV and -O flags, and use the file handle for stdout
+    Command::new("nmap")
+            .arg("-p-")
+            .arg(target)
+            .stdout(file_handle)
+            .output()
+            .expect("ls command failed to start");
+    println!("TCP all done");
 }

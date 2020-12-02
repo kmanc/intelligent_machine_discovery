@@ -10,6 +10,7 @@ use std::io::{BufRead, BufReader};
 use std::net::{IpAddr};
 use std::process;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 
@@ -98,7 +99,7 @@ fn main(){
             // Let the user know you are writing the IP/hostname pair to /etc/hosts
             println!("Adding \"{} {}\" to /etc/hosts and running additional discovery", &ip_address, &hostname);
             // Write the IP/hostname pair to /etc/hosts
-            writeln!(&file_handle, "{} {}", &ip_address, &hostname);
+            writeln!(&file_handle, "{} {}", &ip_address, &hostname).expect("Could not write to /etc/hosts");
             println!("\tDone!");
         }
     }
@@ -106,7 +107,7 @@ fn main(){
     // Run a basic nmap scan with service discovery and OS fingerprinting
     println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
     let basic_file = format!("{}/basic_nmap", ip_address);
-    //run_basic_nmap(&username, &ip_address, &basic_file);
+    run_basic_nmap(&username, &ip_address, &basic_file);
     println!("\tDone!");
 
     println!("Reading results from \"nmap -sV -O {}\" to determine next steps", ip_address);
@@ -416,6 +417,8 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
 
 fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) {
     let filename = format!("{}/nikto_{}_{}", &ip_address, &target, &port);
+    let target = String::from(target);
+    let port = String::from(port);
     create_output_file(username, &filename);
 
     // Prep an error string in case the file handle can't be obtained
@@ -450,20 +453,96 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
                                   .open(&filename)
                                   .expect(&handle_error_message);
 
-    // Run the gobuster with a slew of flags
+    // Run gobuster with a slew of flags
     let gobuster_arg = format!("http://{}:{}", &target, &port);
-    Command::new("gobuster")
-            .arg("dir")
-            .arg("-q")
-            .arg("-t")
-            .arg("25")
-            .arg("-r")
-            .arg("-w")
-            .arg("/usr/share/wordlists/seclists/directory-list-2.3-small.txt")
-            .arg("-u")
-            .arg(&gobuster_arg)
-            .stdout(file_handle)
-            .output()
-            .expect("gobuster command failed to run");
+    let gobuster = Command::new("gobuster")
+                           .arg("dir")
+                           .arg("-q")
+                           .arg("-t")
+                           .arg("25")
+                           .arg("-r")
+                           .arg("-w")
+                           .arg("/usr/share/wordlists/seclists/directory-list-2.3-small.txt")
+                           .arg("-u")
+                           .arg(&gobuster_arg)
+                           .stdout(file_handle)
+                           .output()
+                           .expect("gobuster command failed to run");
+
     println!("\t{} done", filename);
+
+    // Grab the stdout
+    let gobuster = gobuster.stdout;
+    // Convert it to a string
+    let gobuster = String::from_utf8(gobuster).unwrap();
+    // Remove whitespace
+    let gobuster = gobuster.trim();
+    // Split it by newlines and allow it to be mutable
+    let mut gobuster: Vec<String> = gobuster.split("\n")
+                                            .map(|s| s.trim().to_string())
+                                            .collect();
+    // Add a slash to the vector because we're going to want to scan the root directory
+    gobuster.push(String::from("/"));
+
+    // We're going to spin up a bunch of threads that need to share a common output
+    let wfuzz_result = Arc::new(Mutex::new(vec![]));
+    let mut wfuzz_handles = vec![];
+
+    for dir in gobuster.iter() {
+        let wfuzz_result = Arc::clone(&wfuzz_result);
+        let thread_target = target.clone();
+        let thread_port = port.clone();
+        let thread_dir = dir.clone();
+        let handle = thread::spawn(move || {
+            let mut thread_result = wfuzz_result.lock().unwrap();
+
+            thread_result.extend(run_wfuzz(&thread_dir, &thread_target, &thread_port));
+        });
+        wfuzz_handles.push(handle);
+    }
+
+    for handle in wfuzz_handles {
+        handle.join().unwrap();
+    }
+
+    println!("Result: {:?}", *wfuzz_result.lock().unwrap());
+}
+
+fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
+    println!("DIR {}\nTARGET {}\nPORT {}", dir, target, port);
+    let wfuzz_arg = format!("http://{}:{}{}/FUZZ", target, port, dir);
+    let wfuzz_err = format!("Failed to run wfuzz on {} port {}'s {} directory", target, port, dir);
+    let wfuzz = Command::new("wfuzz")
+                        .arg("-w")
+                        .arg("/usr/share/wordlists/seclists/raft-medium-files.txt")
+                        .arg("-t")
+                        .arg("20")
+                        .arg("--hc")
+                        .arg("301,403,404")
+                        .arg("-o")
+                        .arg("raw")
+                        .arg(wfuzz_arg)
+                        .output()
+                        .expect(&wfuzz_err);
+
+    // Grab the stdout
+    let wfuzz = wfuzz.stdout;
+    // Convert it to a string
+    let wfuzz = String::from_utf8(wfuzz).unwrap();
+    // Remove whitespace
+    let wfuzz = wfuzz.trim();
+    // Split it by newlines and allow it to be mutable
+    let wfuzz: Vec<String> = wfuzz.split("\n")
+                                  .map(|s| s.trim().to_string())
+                                  .collect();
+
+    println!("PRE PROCESSED WFUZZ {:?}", wfuzz);
+    let cutoff = wfuzz.len() - 3;
+    let mut wfuzz_out = vec![wfuzz[0].clone()];
+    for file in wfuzz[6..cutoff].iter() {
+        wfuzz_out.push(String::from(file));
+    }
+    //wfuzz_out.extend(&wfuzz[6..cutoff]);
+    println!("POST PROCESSED WFUZZ {:?}", wfuzz_out);
+    wfuzz_out
 }

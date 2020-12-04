@@ -97,7 +97,7 @@ fn main(){
                                           .open("/etc/hosts")
                                           .expect("Could obtain a handle to /etc/hosts");
             // Let the user know you are writing the IP/hostname pair to /etc/hosts
-            println!("Adding \"{} {}\" to /etc/hosts and running additional discovery", &ip_address, &hostname);
+            println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", &ip_address, &hostname);
             // Write the IP/hostname pair to /etc/hosts
             writeln!(&file_handle, "{} {}", &ip_address, &hostname).expect("Could not write to /etc/hosts");
             println!("\tDone!");
@@ -389,7 +389,8 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
             .stdout(file_handle)
             .output()
             .expect("nmap command failed to run");
-    println!("TCP all done");
+
+    println!("Completed \"nmap -p-\" scan");
 }
 
 
@@ -412,7 +413,8 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
             .stdout(file_handle)
             .output()
             .expect("showmount command failed to run");
-    println!("showmount done");
+
+    println!("Completed showmount scan");
 }
 
 fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) {
@@ -439,7 +441,8 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
             .stdout(file_handle)
             .output()
             .expect("nikto command failed to run");
-    println!("\t{} done", filename);
+
+    println!("\tCompleted nikto scan for {}:{}", &target, &port);
 
     let filename = format!("{}/gobuster_dirs_{}_{}", &ip_address, &target, &port);
     create_output_file(username, &filename);
@@ -462,14 +465,14 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
                            .arg("25")
                            .arg("-r")
                            .arg("-w")
-                           .arg("/usr/share/wordlists/seclists/directory-list-2.3-small.txt")
+                           .arg("/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt")
                            .arg("-u")
                            .arg(&gobuster_arg)
                            .stdout(file_handle)
                            .output()
                            .expect("gobuster command failed to run");
 
-    println!("\t{} done", filename);
+    println!("\tCompleted gobuster scan for {}:{}", &target, &port);
 
     // Grab the stdout
     let gobuster = gobuster.stdout;
@@ -481,22 +484,24 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
     let mut gobuster: Vec<String> = gobuster.split("\n")
                                             .map(|s| s.trim().to_string())
                                             .collect();
-    // Add a slash to the vector because we're going to want to scan the root directory
-    gobuster.push(String::from("/"));
+    // Make sure at a bare minimum the empty string is in there so we will scan the root dir
+    if !gobuster.iter().any(|i| i == "") {
+        gobuster.push(String::from(""));
+    }
 
     // We're going to spin up a bunch of threads that need to share a common output
     let wfuzz_result = Arc::new(Mutex::new(vec![]));
     let mut wfuzz_handles = vec![];
 
     for dir in gobuster.iter() {
+        println!("Starting wfuzz scan for {}:{}{}/", &target, &port, &dir);
         let wfuzz_result = Arc::clone(&wfuzz_result);
-        let thread_target = target.clone();
-        let thread_port = port.clone();
-        let thread_dir = dir.clone();
+        let (thread_target, thread_port, thread_dir) = (target.clone(), port.clone(), dir.clone());
         let handle = thread::spawn(move || {
             let mut thread_result = wfuzz_result.lock().unwrap();
 
-            thread_result.extend(run_wfuzz(&thread_dir, &thread_target, &thread_port));
+            let append: Vec<String> = run_wfuzz(&thread_dir, &thread_target, &thread_port);
+            thread_result.extend(append);
         });
         wfuzz_handles.push(handle);
     }
@@ -505,13 +510,26 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
         handle.join().unwrap();
     }
 
-    println!("Result: {:?}", *wfuzz_result.lock().unwrap());
+    let wfuzz_file = format!("{}/wfuzz_{}_{}", &ip_address, &target, &port);
+    let file_handle = OpenOptions::new()
+                                  .create(true)
+                                  .append(true)
+                                  .open(wfuzz_file)
+                                  .expect("Could not obtain handle to wfuzz file");
+
+    let wfuzz_result = wfuzz_result.lock().unwrap();
+    for entry in wfuzz_result.iter() {
+        writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
+    }
 }
 
 fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
-    println!("DIR {}\nTARGET {}\nPORT {}", dir, target, port);
+    // Format a string to pass to wfuzz
     let wfuzz_arg = format!("http://{}:{}{}/FUZZ", target, port, dir);
+    println!("Scanning for files on {}", wfuzz_arg);
+    // Format a string in case of error
     let wfuzz_err = format!("Failed to run wfuzz on {} port {}'s {} directory", target, port, dir);
+    // Wfuzz + a million arguments
     let wfuzz = Command::new("wfuzz")
                         .arg("-w")
                         .arg("/usr/share/wordlists/seclists/raft-medium-files.txt")
@@ -536,13 +554,17 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
                                   .map(|s| s.trim().to_string())
                                   .collect();
 
-    println!("PRE PROCESSED WFUZZ {:?}", wfuzz);
-    let cutoff = wfuzz.len() - 3;
+    // Some of this is garbage banner stuff, so filter that out
+    let header_elements_end = 5;
+    let footer_elements_begin = wfuzz.len() - 4;
+    // The first banner entry is useful, grab that
     let mut wfuzz_out = vec![wfuzz[0].clone()];
-    for file in wfuzz[6..cutoff].iter() {
-        wfuzz_out.push(String::from(file));
+    // Only include the other parts that are not part of the banner
+    for found in wfuzz[header_elements_end..footer_elements_begin].iter() {
+        wfuzz_out.push(String::from(found));
     }
-    //wfuzz_out.extend(&wfuzz[6..cutoff]);
-    println!("POST PROCESSED WFUZZ {:?}", wfuzz_out);
+
+    println!("Completed wfuzz scan for {}:{}{}", &target, &port, &dir);
+    // Return filtered parts
     wfuzz_out
 }

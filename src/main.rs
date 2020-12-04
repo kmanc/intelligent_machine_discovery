@@ -57,20 +57,24 @@ fn main(){
 
     // Spawn thread for nmap scan on all tcp ports
     println!("Kicking off thread for scanning all TCP ports");
-    // Clone variables so the thread can use them without borrowing/ttl issues
-    let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
-    let tcp_file = format!("{}/tcp_all_nmap", ip_address);
-    threads.push(thread::spawn(move|| {
-        run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+    threads.push(thread::spawn({
+        // Clone variables so the thread can use them without borrowing/ttl issues
+        let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
+        let tcp_file = format!("{}/tcp_all_nmap", ip_address);
+        move|| {
+            run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+        }
     }));
 
     // Spawn thread for showmount scan
     println!("Kicking off thread for listing NFS shares");
-    // Clone variables so the thread can use them without borrowing/ttl issues
-    let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
-    let showmount_file = format!("{}/nfs_shares", ip_address);
-    threads.push(thread::spawn(move|| {
-        run_showmount(&showmount_thread_username, &showmount_thread_ip, &showmount_file);
+    threads.push(thread::spawn({
+        // Clone variables so the thread can use them without borrowing/ttl issues
+        let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
+        let showmount_file = format!("{}/nfs_shares", ip_address);
+        move|| {
+            run_showmount(&showmount_thread_username, &showmount_thread_ip, &showmount_file);
+        }
     }));
 
     // If the user entered a hostname, add it to /etc/hosts
@@ -132,12 +136,20 @@ fn main(){
     for port in parsed_nmap.http.iter() {
         let web_targets: Vec<String> = vec![ip_address.clone(), hostname.clone()];
         for web_host in web_targets.iter() {
-            println!("Kicking off thread for scanning http presence on {}:{}", &web_host, &port);
+            println!("Kicking off thread for nikto scan on {}:{}", &web_host, &port);
+            threads.push(thread::spawn({
+                // Clone variables so the thread can use them without borrowing/ttl issues
+                let (nikto_thread_username, nikto_thread_ip, nikto_thread_host, nikto_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
+                move || {
+                    run_nikto(&nikto_thread_username, &nikto_thread_ip, &nikto_thread_host, &nikto_thread_port);
+                }
+            }));
+            println!("Kicking off thread for gobuster/wfuzz scan on {}:{}", &web_host, &port);
             threads.push(thread::spawn({
                 // Clone variables so the thread can use them without borrowing/ttl issues
                 let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
                 move || {
-                    run_web_scanning(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
+                    run_gobuster_wfuzz(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
                 }
             }));
         }
@@ -419,7 +431,7 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
     println!("\tCompleted scan for NFS shares");
 }
 
-fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) {
+fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
     let filename = format!("{}/nikto_{}_{}", &ip_address, &target, &port);
     let target = String::from(target);
     let port = String::from(port);
@@ -447,8 +459,13 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
             .expect("nikto command failed to run");
 
     println!("\tCompleted nikto scan on {}:{}", &target, &port);
+}
 
+
+fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str) {
     let filename = format!("{}/gobuster_dirs_{}_{}", &ip_address, &target, &port);
+    let target = String::from(target);
+    let port = String::from(port);
     create_output_file(username, &filename);
 
     println!("Starting gobuster directoty scan on {}:{}", &target, &port);
@@ -530,6 +547,7 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
         writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
     }
 }
+
 
 fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
     // Format a string to pass to wfuzz

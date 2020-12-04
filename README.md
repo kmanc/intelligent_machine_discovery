@@ -4,8 +4,11 @@ This is a poor excuse for a real README, but a "real" README is in the works. IM
 It is the evolution of a shell script I wrote for my OSCP exam that I decided to make in Rust as a learning experience.
 
 USE:
+
 `./imd <ip_address> [-h <hostname>]`
+
 EXAMPLE:
+
 `./imd 10.10.10.215 academy.htb`
 
 NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already

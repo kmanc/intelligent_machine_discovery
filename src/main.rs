@@ -5,7 +5,7 @@
 
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{Write};
+use std::io::{self, Write};
 use std::io::{BufRead, BufReader};
 use std::net::{IpAddr};
 use std::process;
@@ -160,6 +160,8 @@ fn main(){
     for thread in threads {
         thread.join().unwrap();
     }
+
+    io::stdout().flush().unwrap();
 }
 
 

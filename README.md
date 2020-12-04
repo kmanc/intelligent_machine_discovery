@@ -9,7 +9,7 @@ USE:
 
 EXAMPLE:
 
-`./imd 10.10.10.215 academy.htb`
+`./imd 10.10.10.215 -h academy.htb`
 
 NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)

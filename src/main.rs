@@ -534,11 +534,12 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
         handle.join().unwrap();
     }
 
-    let wfuzz_file = format!("{}/files_{}:{}", &ip_address, &target, &port);
+    let filename = format!("{}/files_{}:{}", &ip_address, &target, &port);
+    create_output_file(username, &filename);
     let file_handle = OpenOptions::new()
                                   .create(true)
                                   .append(true)
-                                  .open(wfuzz_file)
+                                  .open(filename)
                                   .expect("Could not obtain handle to wfuzz file");
 
     let wfuzz_result = wfuzz_result.lock().unwrap();

@@ -1,5 +1,5 @@
 [package]
-name = "intelligent_machine_discovery"
+name = "imd"
 version = "0.1.0"
 authors = ["Kevin Conley <kmancxc@gmail.com>"]
 edition = "2018"

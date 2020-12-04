@@ -1,11 +1,9 @@
 # Intelligent Machine Discovery
 
-This is a poor excuse for a real README, but a "real" README is in the works. IMD is a tool
-made to do discovery/recon on machines like you might find in CTFs. It is the evolution of
-a shell script I wrote for my OSCP exam that I decided to make in Rust as a learning experience.
+This is a poor excuse for a real README, but a "real" README is in the works. IMD is a tool made to do discovery/recon on machines like you might find in CTFs.
+It is the evolution of a shell script I wrote for my OSCP exam that I decided to make in Rust as a learning experience.
 
-NOTE: In order to run early versions of IMD you will need a few things on your machine that you
-may not have already
+NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)
 - [Nikto](https://cirt.net/Nikto2)
 - [Gobuster](https://github.com/OJ/gobuster)

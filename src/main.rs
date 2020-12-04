@@ -60,7 +60,7 @@ fn main(){
     threads.push(thread::spawn({
         // Clone variables so the thread can use them without borrowing/ttl issues
         let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
-        let tcp_file = format!("{}/tcp_all_nmap", ip_address);
+        let tcp_file = format!("{}/nmap_all_tcp", ip_address);
         move|| {
             run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
         }
@@ -110,7 +110,7 @@ fn main(){
 
     // Run a basic nmap scan with service discovery and OS fingerprinting
     println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
-    let basic_file = format!("{}/basic_nmap", ip_address);
+    let basic_file = format!("{}/nmap_basic", ip_address);
     run_basic_nmap(&username, &ip_address, &basic_file);
     println!("\tBasic nmap scan complete!");
 
@@ -431,7 +431,7 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
 }
 
 fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
-    let filename = format!("{}/nikto_{}_{}", &ip_address, &target, &port);
+    let filename = format!("{}/nikto_{}:{}", &ip_address, &target, &port);
     let target = String::from(target);
     let port = String::from(port);
     create_output_file(username, &filename);
@@ -462,7 +462,7 @@ fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
 
 
 fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str) {
-    let filename = format!("{}/gobuster_dirs_{}_{}", &ip_address, &target, &port);
+    let filename = format!("{}/dirs_{}:{}", &ip_address, &target, &port);
     let target = String::from(target);
     let port = String::from(port);
     create_output_file(username, &filename);
@@ -534,7 +534,7 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
         handle.join().unwrap();
     }
 
-    let wfuzz_file = format!("{}/wfuzz_{}_{}", &ip_address, &target, &port);
+    let wfuzz_file = format!("{}/files_{}:{}", &ip_address, &target, &port);
     let file_handle = OpenOptions::new()
                                   .create(true)
                                   .append(true)
@@ -560,7 +560,7 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
                         .arg("-t")
                         .arg("20")
                         .arg("--hc")
-                        .arg("301,403,404")
+                        .arg("301,302,404")
                         .arg("-o")
                         .arg("raw")
                         .arg(wfuzz_arg)

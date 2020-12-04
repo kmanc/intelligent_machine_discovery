@@ -43,7 +43,7 @@ fn main(){
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
     ping_check(&ip_address);
-    println!("\tDone!");
+    println!("\tConnectivity confirmed!");
 
     // Get the user associated with the active shell session for file permissions later
     let username = capture_username();
@@ -100,7 +100,7 @@ fn main(){
             println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", &ip_address, &hostname);
             // Write the IP/hostname pair to /etc/hosts
             writeln!(&file_handle, "{} {}", &ip_address, &hostname).expect("Could not write to /etc/hosts");
-            println!("\tDone!");
+            println!("\t/etc/hosts updated");
         }
     }
 
@@ -108,7 +108,7 @@ fn main(){
     println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
     let basic_file = format!("{}/basic_nmap", ip_address);
     run_basic_nmap(&username, &ip_address, &basic_file);
-    println!("\tDone!");
+    println!("\tBasic nmap scan complete!");
 
     println!("Reading results from \"nmap -sV -O {}\" to determine next steps", ip_address);
     let parsed_nmap = parse_basic_nmap(&basic_file);
@@ -132,11 +132,13 @@ fn main(){
     for port in parsed_nmap.http.iter() {
         let web_targets: Vec<String> = vec![ip_address.clone(), hostname.clone()];
         for web_host in web_targets.iter() {
-            // Clone variables so the thread can use them without borrowing/ttl issues
-            let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
             println!("Kicking off thread for scanning http presence on {}:{}", &web_host, &port);
-            threads.push(thread::spawn(move || {
-                run_web_scanning(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
+            threads.push(thread::spawn({
+                // Clone variables so the thread can use them without borrowing/ttl issues
+                let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
+                move || {
+                    run_web_scanning(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
+                }
             }));
         }
     }
@@ -390,7 +392,7 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
             .output()
             .expect("nmap command failed to run");
 
-    println!("Completed \"nmap -p-\" scan");
+    println!("Completed nmap scan for all TCP ports");
 }
 
 
@@ -414,7 +416,7 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
             .output()
             .expect("showmount command failed to run");
 
-    println!("Completed showmount scan");
+    println!("\tCompleted scan for NFS shares");
 }
 
 fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) {
@@ -422,6 +424,8 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
     let target = String::from(target);
     let port = String::from(port);
     create_output_file(username, &filename);
+
+    println!("Starting a nikto scan on {}:{}", &target, &port);
 
     // Prep an error string in case the file handle can't be obtained
     let handle_error_message = format!("Failed to obtain handle to file {}", filename);
@@ -442,10 +446,12 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
             .output()
             .expect("nikto command failed to run");
 
-    println!("\tCompleted nikto scan for {}:{}", &target, &port);
+    println!("\tCompleted nikto scan on {}:{}", &target, &port);
 
     let filename = format!("{}/gobuster_dirs_{}_{}", &ip_address, &target, &port);
     create_output_file(username, &filename);
+
+    println!("Starting gobuster directoty scan on {}:{}", &target, &port);
 
     // Prep an error string in case the file handle can't be obtained
     let handle_error_message = format!("Failed to obtain handle to file {}", filename);
@@ -495,15 +501,17 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
 
     for dir in gobuster.iter() {
         println!("Starting wfuzz scan for {}:{}{}/", &target, &port, &dir);
-        let wfuzz_result = Arc::clone(&wfuzz_result);
-        let (thread_target, thread_port, thread_dir) = (target.clone(), port.clone(), dir.clone());
-        let handle = thread::spawn(move || {
-            let mut thread_result = wfuzz_result.lock().unwrap();
 
-            let append: Vec<String> = run_wfuzz(&thread_dir, &thread_target, &thread_port);
-            thread_result.extend(append);
-        });
-        wfuzz_handles.push(handle);
+        wfuzz_handles.push(thread::spawn({
+            let wfuzz_result = Arc::clone(&wfuzz_result);
+            let (thread_target, thread_port, thread_dir) = (target.clone(), port.clone(), dir.clone());
+            move || {
+                let mut thread_result = wfuzz_result.lock().unwrap();
+
+                let append: Vec<String> = run_wfuzz(&thread_dir, &thread_target, &thread_port);
+                thread_result.extend(append);
+            }
+        }));
     }
 
     for handle in wfuzz_handles {
@@ -526,7 +534,6 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
 fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
     // Format a string to pass to wfuzz
     let wfuzz_arg = format!("http://{}:{}{}/FUZZ", target, port, dir);
-    println!("Scanning for files on {}", wfuzz_arg);
     // Format a string in case of error
     let wfuzz_err = format!("Failed to run wfuzz on {} port {}'s {} directory", target, port, dir);
     // Wfuzz + a million arguments
@@ -557,14 +564,14 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
     // Some of this is garbage banner stuff, so filter that out
     let header_elements_end = 5;
     let footer_elements_begin = wfuzz.len() - 4;
-    // The first banner entry is useful, grab that
-    let mut wfuzz_out = vec![wfuzz[0].clone()];
+    // The first and third banner entries are useful, grab those
+    let mut wfuzz_out = vec![wfuzz[0].clone(), wfuzz[2].clone()];
     // Only include the other parts that are not part of the banner
     for found in wfuzz[header_elements_end..footer_elements_begin].iter() {
         wfuzz_out.push(String::from(found));
     }
 
-    println!("Completed wfuzz scan for {}:{}{}", &target, &port, &dir);
+    println!("\tCompleted wfuzz scan for {}:{}{}", &target, &port, &dir);
     // Return filtered parts
     wfuzz_out
 }

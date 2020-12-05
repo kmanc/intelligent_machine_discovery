@@ -5,7 +5,7 @@
 
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{Write};
+use std::io::{self, Write};
 use std::io::{BufRead, BufReader};
 use std::net::{IpAddr};
 use std::process;
@@ -57,20 +57,24 @@ fn main(){
 
     // Spawn thread for nmap scan on all tcp ports
     println!("Kicking off thread for scanning all TCP ports");
-    // Clone variables so the thread can use them without borrowing/ttl issues
-    let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
-    let tcp_file = format!("{}/tcp_all_nmap", ip_address);
-    threads.push(thread::spawn(move|| {
-        run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+    threads.push(thread::spawn({
+        // Clone variables so the thread can use them without borrowing/ttl issues
+        let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
+        let tcp_file = format!("{}/nmap_all_tcp", ip_address);
+        move|| {
+            run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+        }
     }));
 
     // Spawn thread for showmount scan
     println!("Kicking off thread for listing NFS shares");
-    // Clone variables so the thread can use them without borrowing/ttl issues
-    let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
-    let showmount_file = format!("{}/nfs_shares", ip_address);
-    threads.push(thread::spawn(move|| {
-        run_showmount(&showmount_thread_username, &showmount_thread_ip, &showmount_file);
+    threads.push(thread::spawn({
+        // Clone variables so the thread can use them without borrowing/ttl issues
+        let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
+        let showmount_file = format!("{}/nfs_shares", ip_address);
+        move|| {
+            run_showmount(&showmount_thread_username, &showmount_thread_ip, &showmount_file);
+        }
     }));
 
     // If the user entered a hostname, add it to /etc/hosts
@@ -106,11 +110,11 @@ fn main(){
 
     // Run a basic nmap scan with service discovery and OS fingerprinting
     println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
-    let basic_file = format!("{}/basic_nmap", ip_address);
+    let basic_file = format!("{}/nmap_basic", ip_address);
     run_basic_nmap(&username, &ip_address, &basic_file);
     println!("\tBasic nmap scan complete!");
 
-    println!("Reading results from \"nmap -sV -O {}\" to determine next steps", ip_address);
+    println!("Reading results from \"nmap -sV {}\" to determine next steps", ip_address);
     let parsed_nmap = parse_basic_nmap(&basic_file);
     // Report on all discovered ftp ports
     if !parsed_nmap.ftp.is_empty(){
@@ -126,18 +130,26 @@ fn main(){
     if !parsed_nmap.https.is_empty(){
         println!("\tHttps found on port(s) {:?}", &parsed_nmap.https)
     }
-    println!("\tDone!");
+    println!("\tCompleted planning next steps based on nmap scan");
 
     // Make a vector of IP and hostname for easier iteration
     for port in parsed_nmap.http.iter() {
         let web_targets: Vec<String> = vec![ip_address.clone(), hostname.clone()];
         for web_host in web_targets.iter() {
-            println!("Kicking off thread for scanning http presence on {}:{}", &web_host, &port);
+            println!("Kicking off thread for nikto scan on {}:{}", &web_host, &port);
+            threads.push(thread::spawn({
+                // Clone variables so the thread can use them without borrowing/ttl issues
+                let (nikto_thread_username, nikto_thread_ip, nikto_thread_host, nikto_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
+                move || {
+                    run_nikto(&nikto_thread_username, &nikto_thread_ip, &nikto_thread_host, &nikto_thread_port);
+                }
+            }));
+            println!("Kicking off thread for gobuster/wfuzz scans on {}:{}", &web_host, &port);
             threads.push(thread::spawn({
                 // Clone variables so the thread can use them without borrowing/ttl issues
                 let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
                 move || {
-                    run_web_scanning(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
+                    run_gobuster_wfuzz(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
                 }
             }));
         }
@@ -148,6 +160,8 @@ fn main(){
     for thread in threads {
         thread.join().unwrap();
     }
+
+    io::stdout().flush().unwrap();
 }
 
 
@@ -305,7 +319,6 @@ fn run_basic_nmap(username: &str, target: &str, filename: &String) {
     // Run an nmap command with -sV and -O flags, and use the file handle for stdout
     Command::new("nmap")
             .arg("-sV")
-            .arg("-O")
             .arg(target)
             .stdout(file_handle)
             .output()
@@ -392,7 +405,7 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
             .output()
             .expect("nmap command failed to run");
 
-    println!("Completed nmap scan for all TCP ports");
+    println!("\tCompleted nmap scan for all TCP ports");
 }
 
 
@@ -419,8 +432,8 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
     println!("\tCompleted scan for NFS shares");
 }
 
-fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) {
-    let filename = format!("{}/nikto_{}_{}", &ip_address, &target, &port);
+fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
+    let filename = format!("{}/nikto_{}:{}", &ip_address, &target, &port);
     let target = String::from(target);
     let port = String::from(port);
     create_output_file(username, &filename);
@@ -447,11 +460,16 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
             .expect("nikto command failed to run");
 
     println!("\tCompleted nikto scan on {}:{}", &target, &port);
+}
 
-    let filename = format!("{}/gobuster_dirs_{}_{}", &ip_address, &target, &port);
+
+fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str) {
+    let filename = format!("{}/dirs_{}:{}", &ip_address, &target, &port);
+    let target = String::from(target);
+    let port = String::from(port);
     create_output_file(username, &filename);
 
-    println!("Starting gobuster directoty scan on {}:{}", &target, &port);
+    println!("Starting gobuster directory scan on {}:{}", &target, &port);
 
     // Prep an error string in case the file handle can't be obtained
     let handle_error_message = format!("Failed to obtain handle to file {}", filename);
@@ -500,7 +518,7 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
     let mut wfuzz_handles = vec![];
 
     for dir in gobuster.iter() {
-        println!("Starting wfuzz scan for {}:{}{}/", &target, &port, &dir);
+        println!("Starting wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
 
         wfuzz_handles.push(thread::spawn({
             let wfuzz_result = Arc::clone(&wfuzz_result);
@@ -518,11 +536,12 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
         handle.join().unwrap();
     }
 
-    let wfuzz_file = format!("{}/wfuzz_{}_{}", &ip_address, &target, &port);
+    let filename = format!("{}/files_{}:{}", &ip_address, &target, &port);
+    create_output_file(username, &filename);
     let file_handle = OpenOptions::new()
                                   .create(true)
                                   .append(true)
-                                  .open(wfuzz_file)
+                                  .open(filename)
                                   .expect("Could not obtain handle to wfuzz file");
 
     let wfuzz_result = wfuzz_result.lock().unwrap();
@@ -530,6 +549,7 @@ fn run_web_scanning(username: &str, ip_address: &str, target: &str, port: &str) 
         writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
     }
 }
+
 
 fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
     // Format a string to pass to wfuzz
@@ -543,7 +563,7 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
                         .arg("-t")
                         .arg("20")
                         .arg("--hc")
-                        .arg("301,403,404")
+                        .arg("301,302,404")
                         .arg("-o")
                         .arg("raw")
                         .arg(wfuzz_arg)
@@ -571,7 +591,7 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
         wfuzz_out.push(String::from(found));
     }
 
-    println!("\tCompleted wfuzz scan for {}:{}{}", &target, &port, &dir);
+    println!("\tCompleted wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
     // Return filtered parts
     wfuzz_out
 }

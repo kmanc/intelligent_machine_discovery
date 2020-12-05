@@ -1,2 +1,6 @@
-/target
+# Dirs
+target/
 .idea/
+
+# Files
+main

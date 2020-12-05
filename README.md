@@ -5,11 +5,11 @@ It is the evolution of a shell script I wrote for my OSCP exam that I decided to
 
 USE:
 
-`./imd <ip_address> [-h <hostname>]`
+`sudo ./imd <ip_address> [-h <hostname>]`
 
 EXAMPLE:
 
-`./imd 10.10.10.215 -h academy.htb`
+`sudo ./imd 10.10.10.215 -h academy.htb`
 
 NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)
@@ -23,6 +23,9 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
 #### TODO
 - General code cleanup
     - Most of v1 is hacked together to get it to work. It's not pretty (yet)
+  Bugfixes
+    - I'm pretty sure some of the concurrency does not work as intended
+    - There is bound to be more
 - Offer options
     - There are lots of hard-coded things that can't be changed in v0.1.0
 - A real README

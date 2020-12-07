@@ -32,16 +32,12 @@ fn main(){
     // Collect the command line args
     let args: Vec<String> = env::args().collect();
     // Get the user entered IP address(es) and optionally hostname(s)
-    let args = parse_args(&args);
-    println!("Targets: {:?}", args);
-    let first_ip = args[0].ip.to_string();
-    let first_hostname = args[0].hostname.as_deref().unwrap_or("None");
-    println!("{}, {}", first_ip, first_hostname);
-    process::exit(1);
+    let targets = get_targets_from_command_line(&args);
+    println!("Targets: {:?}", targets);
     // Just take the first IP address for now
-    let ip_address = &args[0].ip.to_string();
+    let ip_address = &targets[0].ip.to_string();
     // Just take the first hostname if it was entered
-    let hostname = &String::from(args[0].hostname.as_deref().unwrap_or("None"));
+    let hostname = &String::from(targets[0].hostname.as_deref().unwrap_or("None"));
 
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
@@ -185,7 +181,7 @@ fn sudo_check() {
 }
 
 
-fn parse_args(args: &[String]) -> Vec<TargetMachine> {
+fn get_targets_from_command_line(args: &[String]) -> Vec<TargetMachine> {
     // Start a vector of targets
     let mut targets: Vec<TargetMachine> = vec![];
     // Make a "last seen" variable for look-back capability

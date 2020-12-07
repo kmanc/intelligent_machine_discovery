@@ -11,10 +11,10 @@ use std::process::{self, Command};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-
-struct Arguments {
-    ips: Vec<String>,
-    hostnames: Vec<String>,
+#[derive(Debug)]
+struct TargetMachine {
+    ip: IpAddr,
+    hostname: Option<String>,
 }
 
 
@@ -32,11 +32,12 @@ fn main(){
     // Collect the command line args
     let args: Vec<String> = env::args().collect();
     // Get the user entered IP address(es) and optionally hostname(s)
-    let args = parse_args(&args);
+    let targets = get_targets_from_command_line(&args);
+    println!("Targets: {:?}", targets);
     // Just take the first IP address for now
-    let ip_address = &args.ips[0];
+    let ip_address = &targets[0].ip.to_string();
     // Just take the first hostname if it was entered
-    let hostname = &args.hostnames[0];
+    let hostname = &String::from(targets[0].hostname.as_deref().unwrap_or("None"));
 
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
@@ -180,57 +181,75 @@ fn sudo_check() {
 }
 
 
-fn parse_args(args: &[String]) -> Arguments {
-    // Exit early if no arguments were supplied
-    if args.len() == 1 {
-        println!("EXITING - Please provide at least one valid IP address as an argument");
-        process::exit(1);
-    }
-    // Assume until we're told otherwise that the first arguments are IP addresses
-    let mut is_ip = true;
-    // Get the name of the executable we ran so we don't parse it later
-    let executable = &args[0];
-    // Set a trigger to differentiate between IPs and hostnames
-    let flag = &"-h";
-    // Set an empty vector of IPs
-    let mut ips: Vec<String> = vec![];
-    // Set an empty vector of hostnames
-    let mut hostnames: Vec<String> = vec![];
-    // Iterate over the arguments we were given
-    for arg in args.iter() {
-        // Skip it completely if it is the executable name
-        if arg == executable {
-            continue
-        }
-        // If it is "-h", recognize that we will now be parsing hostnames, then skip it
-        if arg == flag {
-            is_ip = false;
-            continue
-        }
-        if is_ip {
-            // If it's supposed to be an IP address, verify it and add to the ip vector or exit
-            let ip = arg.trim();
-            let validate = ip.parse::<IpAddr>();
-            if validate.is_err() {
-                println!("EXITING - {} is not a valid IP address", ip);
-                process::exit(1);
+fn get_targets_from_command_line(args: &[String]) -> Vec<TargetMachine> {
+    // Start a vector of targets
+    let mut targets: Vec<TargetMachine> = vec![];
+    // Make a "last seen" variable for look-back capability
+    let mut last: Option<IpAddr> = None;
+    // Iterate over the arguments we were given (skipping the first because it will be the executable name)
+    for arg in args[1..].iter() {
+        // Trim the arg in case of whitespace nonsense
+        let arg = arg.trim();
+        // Attempt to parse the argument as an IP address
+        let ip = arg.parse::<IpAddr>();
+        // Match on the IP address, which is either a valid IP or an error
+        match ip {
+            // If the IP address is valid
+            Ok(ip) => {
+                // If last is None
+                if last == None {
+                    // Set last to the IP address
+                    last = Some(ip);
+                }
+                // Otherwise if last is not None
+                else if last != None {
+                    // Add a target machine to the list with last as its IP address and None as its hostname
+                    targets.push(TargetMachine{
+                        ip: last.unwrap(),
+                        hostname: None,
+                    });
+                    // Then set last as the IP address
+                    last = Some(ip);
+                }
             }
-            ips.push(String::from(ip));
-        } else {
-            // If it's supposed to be a hostname, add it to the hostname vector
-            let hostname = arg.trim();
-            hostnames.push(String::from(hostname));
+            // If the IP address is an error
+            Err(_) => {
+                // If last is None
+                if last == None {
+                    // Exit because either the person typo'd an IP address or entered two straight hostnames
+                    println!("EXITING - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg);
+                    process::exit(1);
+                }
+                // Otherwise if last is not None
+                else if last != None {
+                    // Add a target machine to the list with last as its IP address and the argument as its hostname
+                    targets.push(TargetMachine{
+                        ip: last.unwrap(),
+                        hostname: Some(String::from(arg)),
+                    });
+                    // Set last to None
+                    last = None;
+                }
+            }
         }
     }
 
-    // If there hasn't been an IP address parsed, exit because we have no target
-    if ips.len() == 0 {
-        println!("EXITING - Please provide at least one valid IP address");
+    // If the last argument supplied was an IP address it needs to be added to the list with no hostname
+    if last != None {
+        targets.push(TargetMachine{
+                ip: last.unwrap(),
+                hostname: None,
+        });
+    }
+
+    // If there hasn't been a single target parsed, exit because we have nothing to do
+    if targets.len() == 0 {
+        println!("EXITING - Please provide at least one valid IP address as a target");
         process::exit(1);
     }
 
     // Return the arguments struct, containing the IP address and hostname vectors
-    Arguments { ips, hostnames }
+    targets
 }
 
 

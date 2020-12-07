@@ -5,11 +5,9 @@
 
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{self, Write};
-use std::io::{BufRead, BufReader};
-use std::net::{IpAddr};
-use std::process;
-use std::process::Command;
+use std::io::{self, BufRead, BufReader, Write};
+use std::net::IpAddr;
+use std::process::{self, Command};
 use std::sync::{Arc, Mutex};
 use std::thread;
 

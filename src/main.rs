@@ -33,6 +33,8 @@ fn main(){
     let args: Vec<String> = env::args().collect();
     // Get the user entered IP address(es) and optionally hostname(s)
     let args = parse_args(&args);
+    println!("Targets: {:?}", args);
+    process::exit(1);
     // Just take the first IP address for now
     let ip_address = &String::from("192.168.1.1");
     // Just take the first hostname if it was entered
@@ -181,11 +183,6 @@ fn sudo_check() {
 
 
 fn parse_args(args: &[String]) -> Vec<TargetMachine> {
-    // Exit early if no arguments were supplied
-    if args.len() == 1 {
-        println!("EXITING - Please provide at least one valid IP address as an argument");
-        process::exit(1);
-    }
     // Start a vector of targets
     let mut targets: Vec<TargetMachine> = vec![];
     // Make a "last seen" variable for look-back capability
@@ -222,7 +219,7 @@ fn parse_args(args: &[String]) -> Vec<TargetMachine> {
         // If the argument is not an IP address and the last variable is None
         else {
             // Exit because either the person typo'd an IP address or entered two straight hostnames
-            println!("EXITING - The argument {} is not valid. Please enter IP addresses (optionally followed by associated hostnames)", arg);
+            println!("EXITING - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg);
             process::exit(1);
         }
     }

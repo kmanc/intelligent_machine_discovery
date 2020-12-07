@@ -34,11 +34,14 @@ fn main(){
     // Get the user entered IP address(es) and optionally hostname(s)
     let args = parse_args(&args);
     println!("Targets: {:?}", args);
+    let first_ip = args[0].ip.to_string();
+    let first_hostname = args[0].hostname.as_deref().unwrap_or("None");
+    println!("{}, {}", first_ip, first_hostname);
     process::exit(1);
     // Just take the first IP address for now
-    let ip_address = &String::from("192.168.1.1");
+    let ip_address = &args[0].ip.to_string();
     // Just take the first hostname if it was entered
-    let hostname = &String::from("koins.cloud");
+    let hostname = &String::from(args[0].hostname.as_deref().unwrap_or("None"));
 
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
@@ -193,34 +196,45 @@ fn parse_args(args: &[String]) -> Vec<TargetMachine> {
         let arg = arg.trim();
         // Attempt to parse the argument as an IP address
         let ip = arg.parse::<IpAddr>();
-        // If the argument is an IP address, but the variable last is set to None (as it is on first run)
-        if !ip.is_err() && last == None {
-            // Set last to the IP address
-            last = Some(ip.unwrap());
-        }
-        // If the argument is an IP address and the variable last is not None
-        else if !ip.is_err() && last != None {
-            // Add a target machine to the list with last as its IP address and None as its hostname
-            targets.push(TargetMachine{
-                ip: last.unwrap(),
-                hostname: None,
-            });
-            last = Some(ip.unwrap());
-        }
-        // If the argument is not an IP address and the variable last is not None
-        else if ip.is_err() && last != None {
-            // Add a target machine to the list with last as its IP address and the argument as its hostname
-            targets.push(TargetMachine{
-                ip: last.unwrap(),
-                hostname: Some(String::from(arg)),
-            });
-            last = None;
-        }
-        // If the argument is not an IP address and the last variable is None
-        else {
-            // Exit because either the person typo'd an IP address or entered two straight hostnames
-            println!("EXITING - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg);
-            process::exit(1);
+        // Match on the IP address, which is either a valid IP or an error
+        match ip {
+            // If the IP address is valid
+            Ok(ip) => {
+                // And last is None
+                if last == None {
+                    // Set last to the IP address
+                    last = Some(ip);
+                }
+                // Otherwise if last is not None
+                else if last != None {
+                    // Add a target machine to the list with last as its IP address and None as its hostname
+                    targets.push(TargetMachine{
+                        ip: last.unwrap(),
+                        hostname: None,
+                    });
+                    // Then set last as the IP address
+                    last = Some(ip);
+                }
+            }
+            // If the IP address is an error
+            Err(err) => {
+                // And last is None
+                if last == None {
+                    // Exit because either the person typo'd an IP address or entered two straight hostnames
+                    println!("EXITING - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg);
+                    process::exit(1);
+                }
+                // Otherwise if last is not None
+                else if last != None {
+                    // Add a target machine to the list with last as its IP address and the argument as its hostname
+                    targets.push(TargetMachine{
+                        ip: last.unwrap(),
+                        hostname: Some(String::from(arg)),
+                    });
+                    // Set last to None
+                    last = None;
+                }
+            }
         }
     }
 

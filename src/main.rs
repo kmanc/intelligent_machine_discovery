@@ -200,7 +200,7 @@ fn parse_args(args: &[String]) -> Vec<TargetMachine> {
         match ip {
             // If the IP address is valid
             Ok(ip) => {
-                // And last is None
+                // If last is None
                 if last == None {
                     // Set last to the IP address
                     last = Some(ip);
@@ -217,8 +217,8 @@ fn parse_args(args: &[String]) -> Vec<TargetMachine> {
                 }
             }
             // If the IP address is an error
-            Err(err) => {
-                // And last is None
+            Err(_) => {
+                // If last is None
                 if last == None {
                     // Exit because either the person typo'd an IP address or entered two straight hostnames
                     println!("EXITING - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg);

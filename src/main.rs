@@ -77,14 +77,17 @@ fn main(){
     }));
 
     // If the user entered a hostname, add it to /etc/hosts
-    if !hostname.is_empty() {
+    if hostname != "None" {
+    //if !hostname.is_empty() {
+        // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
+        let filename = "/etc/hosts";
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
         let grep_pattern = format!("({})\\s({})$", ip_address, hostname);
         // Run the grep command
         let grep = Command::new("grep")
                        .arg("-E")
                        .arg(grep_pattern)
-                       .arg("/etc/hosts")
+                       .arg(filename)
                        .output()
                        .expect("Failed to run the grep command");
         // Capture the grep output
@@ -97,24 +100,29 @@ fn main(){
             // Obtain a file handle with appending write to /etc/hosts
             let file_handle = OpenOptions::new()
                                           .append(true)
-                                          .open("/etc/hosts")
-                                          .expect("Could obtain a handle to /etc/hosts");
-            // Let the user know you are writing the IP/hostname pair to /etc/hosts
-            println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", &ip_address, &hostname);
-            // Write the IP/hostname pair to /etc/hosts
-            writeln!(&file_handle, "{} {}", &ip_address, &hostname).expect("Could not write to /etc/hosts");
-            println!("\t/etc/hosts updated");
+                                          .open(filename);
+            match file_handle {
+                Ok(file_handle) => {
+                    // Let the user know you are writing the IP/hostname pair to /etc/hosts
+                    println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", &ip_address, &hostname);
+                    // Write the IP/hostname pair to /etc/hosts
+                    writeln!(&file_handle, "{} {}", &ip_address, &hostname).expect("Could not write to /etc/hosts");
+                    println!("\t/etc/hosts updated");
+                },
+                Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+            }
         }
     }
 
-    // Run a basic nmap scan with service discovery and OS fingerprinting
-    println!("Running \"nmap -sV -O {}\" for basic target information", ip_address);
-    let basic_file = format!("{}/nmap_basic", ip_address);
-    run_basic_nmap(&username, &ip_address, &basic_file);
+    // Format filename for use in the nmap function and parser
+    let filename = String::from(format!("{}/nmap_basic", ip_address));
+    // Run a basic nmap scan with service discovery
+    println!("Running \"nmap -sV {}\" for basic target information", ip_address);
+    run_basic_nmap(&username, &ip_address, &filename);
     println!("\tBasic nmap scan complete!");
 
     println!("Reading results from \"nmap -sV {}\" to determine next steps", ip_address);
-    let parsed_nmap = parse_basic_nmap(&basic_file);
+    let parsed_nmap = parse_basic_nmap(&filename);
     // Report on all discovered ftp ports
     if !parsed_nmap.ftp.is_empty(){
         println!("\tFtp found on port(s) {:?}", &parsed_nmap.ftp)
@@ -320,26 +328,27 @@ fn create_output_file(username: &str, filename: &String) {
 }
 
 
-fn run_basic_nmap(username: &str, target: &str, filename: &String) {
+fn run_basic_nmap(username: &str, ip_address: &str, filename: &String) {
     // Create the basic nmap scan file, which will be used to determine what else to run
     create_output_file(username, &filename);
-
-    // Prep an error string in case the file handle can't be obtained
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
 
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(&filename)
-                                  .expect(&handle_error_message);
+                                  .open(&filename);
 
-    // Run an nmap command with -sV and -O flags, and use the file handle for stdout
-    Command::new("nmap")
-            .arg("-sV")
-            .arg(target)
-            .stdout(file_handle)
-            .output()
-            .expect("nmap command failed to run");
+    match file_handle {
+        Ok(file_handle) => {
+            // Run an nmap command with -sV and -O flags, and use the file handle for stdout
+            Command::new("nmap")
+                    .arg("-sV")
+                    .arg(ip_address)
+                    .stdout(file_handle)
+                    .output()
+                    .expect("\"nmap -sV\" command failed to run");
+        },
+        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+    }
 }
 
 
@@ -351,39 +360,41 @@ fn parse_basic_nmap(filename: &String) -> ServicePorts {
     // Set an empty vector of https ports
     let mut https: Vec<String> = vec![];
 
-    // Prep an error string in case the file handle can't be obtained
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
     // Obtain a file handle with read permissions
     let file_handle = OpenOptions::new()
                                   .read(true)
-                                  .open(&filename)
-                                  .expect(&handle_error_message);
+                                  .open(&filename);
 
-    // Get the file contents into a buffer
-    let buffer = BufReader::new(file_handle);
-    // Read the buffer line by line
-    for (_, line) in buffer.lines().enumerate() {
-        // Skip the line if there is an error iterating over it
-        let line = match line {
-            Ok(line) => line,
-            Err(_) => continue,
-        };
-        // Split the line into a vector by spaces
-        let line: Vec<&str> = line.split(" ").collect();
-        if line.contains(&"open") && line.contains(&"ftp") {
-            // If the line indicates ftp is open, get the port and add it to the ftp vector
-            let port = get_port_from_line(line);
-            ftp.push(port);
-        } else if line.contains(&"open") && line.contains(&"http") {
-            // If the line indicates http is open, get the port and add it to the http vector
-            let port = get_port_from_line(line);
-            http.push(port);
-        } else if line.contains(&"open") && line.contains(&"ssl/http") {
-            // If the line indicates https is open, get the port and add it to the https vector
-            let port = get_port_from_line(line);
-            https.push(port);
-        }
+    match file_handle {
+        Ok(file_handle) => {
+            // Get the file contents into a buffer
+            let buffer = BufReader::new(file_handle);
+            // Read the buffer line by line
+            for (_, line) in buffer.lines().enumerate() {
+                // Skip the line if there is an error iterating over it
+                match line {
+                    Ok(line) => {
+                        // Split the line into a vector by spaces
+                        let line: Vec<&str> = line.split(" ").collect();
+                        if line.contains(&"open") && line.contains(&"ftp") {
+                            // If the line indicates ftp is open, get the port and add it to the ftp vector
+                            let port = get_port_from_line(line);
+                            ftp.push(port);
+                        } else if line.contains(&"open") && line.contains(&"http") {
+                            // If the line indicates http is open, get the port and add it to the http vector
+                            let port = get_port_from_line(line);
+                            http.push(port);
+                        } else if line.contains(&"open") && line.contains(&"ssl/http") {
+                            // If the line indicates https is open, get the port and add it to the https vector
+                            let port = get_port_from_line(line);
+                            https.push(port);
+                        }
+                    },
+                    Err(_) => continue,
+                };
+            }
+        },
+        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
     }
 
     // Return the vectors for all of the services we looked for
@@ -405,22 +416,23 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
     create_output_file(username, &filename);
 
-    // Prep an error string in case the file handle can't be obtained
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(&filename)
-                                  .expect(&handle_error_message);
+                                  .open(&filename);
 
-    // Run an nmap command with -p-, and use the file handle for stdout
-    Command::new("nmap")
-            .arg("-p-")
-            .arg(target)
-            .stdout(file_handle)
-            .output()
-            .expect("nmap command failed to run");
+    match file_handle {
+        Ok(file_handle) => {
+            // Run an nmap command with -p-, and use the file handle for stdout
+            Command::new("nmap")
+                    .arg("-p-")
+                    .arg(target)
+                    .stdout(file_handle)
+                    .output()
+                    .expect("\"nmap -p-\" command failed to run");
+        },
+        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+    }
 
     println!("\tCompleted nmap scan for all TCP ports");
 }
@@ -429,22 +441,23 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
 fn run_showmount(username: &str, target: &str, filename: &String) {
     create_output_file(username, &filename);
 
-    // Prep an error string in case the file handle can't be obtained
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(&filename)
-                                  .expect(&handle_error_message);
+                                  .open(&filename);
 
-    // Run the showmount command with -e, and use the file handle for stdout
-    Command::new("showmount")
-            .arg("-e")
-            .arg(target)
-            .stdout(file_handle)
-            .output()
-            .expect("showmount command failed to run");
+    match file_handle {
+        Ok(file_handle) => {
+            // Run the showmount command with -e, and use the file handle for stdout
+            Command::new("showmount")
+                    .arg("-e")
+                    .arg(target)
+                    .stdout(file_handle)
+                    .output()
+                    .expect("\"showmount -e \" command failed to run");
+        },
+        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+    }
 
     println!("\tCompleted scan for NFS shares");
 }
@@ -457,24 +470,25 @@ fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
 
     println!("Starting a nikto scan on {}:{}", &target, &port);
 
-    // Prep an error string in case the file handle can't be obtained
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(&filename)
-                                  .expect(&handle_error_message);
+                                  .open(&filename);
 
-    // Run the showmount command with -e, and use the file handle for stdout
-    Command::new("nikto")
-            .arg("-host")
-            .arg(&target)
-            .arg("-port")
-            .arg(&port)
-            .stdout(file_handle)
-            .output()
-            .expect("nikto command failed to run");
+    match file_handle {
+        Ok(file_handle) => {
+            // Run the nikto command with a bunch of flags, and use the file handle for stdout
+            Command::new("nikto")
+                    .arg("-host")
+                    .arg(&target)
+                    .arg("-port")
+                    .arg(&port)
+                    .stdout(file_handle)
+                    .output()
+                    .expect("nikto command failed to run");
+        },
+        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+    }
 
     println!("\tCompleted nikto scan on {}:{}", &target, &port);
 }
@@ -488,47 +502,53 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
 
     println!("Starting gobuster directory scan on {}:{}", &target, &port);
 
-    // Prep an error string in case the file handle can't be obtained
-    let handle_error_message = format!("Failed to obtain handle to file {}", filename);
-
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(&filename)
-                                  .expect(&handle_error_message);
+                                  .open(&filename);
 
-    // Run gobuster with a slew of flags
-    let gobuster_arg = format!("http://{}:{}", &target, &port);
-    let gobuster = Command::new("gobuster")
-                           .arg("dir")
-                           .arg("-q")
-                           .arg("-t")
-                           .arg("25")
-                           .arg("-r")
-                           .arg("-w")
-                           .arg("/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt")
-                           .arg("-u")
-                           .arg(&gobuster_arg)
-                           .stdout(file_handle)
-                           .output()
-                           .expect("gobuster command failed to run");
+    let gobuster = match file_handle {
+        Ok(file_handle) => {
+            // Run gobuster with a slew of flags
+            let gobuster_arg = format!("http://{}:{}", &target, &port);
+            let gobuster = Command::new("gobuster")
+                                   .arg("dir")
+                                   .arg("-q")
+                                   .arg("-t")
+                                   .arg("25")
+                                   .arg("-r")
+                                   .arg("-w")
+                                   .arg("/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt")
+                                   .arg("-u")
+                                   .arg(&gobuster_arg)
+                                   .stdout(file_handle)
+                                   .output()
+                                   .expect("gobuster command failed to run");
 
-    println!("\tCompleted gobuster scan for {}:{}", &target, &port);
+            println!("\tCompleted gobuster scan for {}:{}", &target, &port);
 
-    // Grab the stdout
-    let gobuster = gobuster.stdout;
-    // Convert it to a string
-    let gobuster = String::from_utf8(gobuster).unwrap();
-    // Remove whitespace
-    let gobuster = gobuster.trim();
-    // Split it by newlines and allow it to be mutable
-    let mut gobuster: Vec<String> = gobuster.split("\n")
-                                            .map(|s| s.trim().to_string())
-                                            .collect();
-    // Make sure at a bare minimum the empty string is in there so we will scan the root dir
-    if !gobuster.iter().any(|i| i == "") {
-        gobuster.push(String::from(""));
-    }
+            // Grab the stdout
+            let gobuster = gobuster.stdout;
+            // Convert it to a string
+            let gobuster = String::from_utf8(gobuster).unwrap();
+            // Remove whitespace
+            let gobuster = gobuster.trim();
+            // Split it by newlines and allow it to be mutable
+            let mut gobuster: Vec<String> = gobuster.split("\n")
+                                                    .map(|s| s.trim().to_string())
+                                                    .collect();
+            // Make sure at a bare minimum the empty string is in there so we will scan the root dir
+            if !gobuster.iter().any(|i| i == "") {
+                gobuster.push(String::from(""));
+            }
+
+            gobuster
+        },
+        Err(err) => {
+            println!("Problem obtaining handle to {}: {}", filename, err);
+            vec![]
+        },
+    };
 
     // We're going to spin up a bunch of threads that need to share a common output
     let wfuzz_result = Arc::new(Mutex::new(vec![]));
@@ -558,13 +578,19 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
     let file_handle = OpenOptions::new()
                                   .create(true)
                                   .append(true)
-                                  .open(filename)
-                                  .expect("Could not obtain handle to wfuzz file");
+                                  .open(&filename);
 
-    let wfuzz_result = wfuzz_result.lock().unwrap();
-    for entry in wfuzz_result.iter() {
-        writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
+    match file_handle {
+        Ok(file_handle) => {
+            // Run the nikto command with a bunch of flags, and use the file handle for stdout
+            let wfuzz_result = wfuzz_result.lock().unwrap();
+            for entry in wfuzz_result.iter() {
+                writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
+            }
+        },
+        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
     }
+
 }
 
 

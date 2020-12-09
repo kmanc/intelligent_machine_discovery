@@ -25,7 +25,7 @@ struct ServicePorts {
 }
 
 
-fn main(){
+fn main() {
     // Make sure the script is run as sudo, exit if not
     sudo_check();
 
@@ -59,9 +59,8 @@ fn main(){
     threads.push(thread::spawn({
         // Clone variables so the thread can use them without borrowing/ttl issues
         let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
-        let tcp_file = format!("{}/nmap_all_tcp", ip_address);
         move|| {
-            run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip, &tcp_file);
+            run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip);
         }
     }));
 
@@ -70,9 +69,8 @@ fn main(){
     threads.push(thread::spawn({
         // Clone variables so the thread can use them without borrowing/ttl issues
         let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
-        let showmount_file = format!("{}/nfs_shares", ip_address);
         move|| {
-            run_showmount(&showmount_thread_username, &showmount_thread_ip, &showmount_file);
+            run_showmount(&showmount_thread_username, &showmount_thread_ip);
         }
     }));
 
@@ -112,15 +110,10 @@ fn main(){
         }
     }
 
-    // Format filename for use in the nmap function and parser
-    let filename = String::from(format!("{}/nmap_basic", ip_address));
     // Run a basic nmap scan with service discovery
     println!("Running \"nmap -sV {}\" for basic target information", ip_address);
-    run_basic_nmap(&username, &ip_address, &filename);
-    println!("\tBasic nmap scan complete!");
+    let parsed_nmap = run_basic_nmap(&username, &ip_address);
 
-    println!("Reading results from \"nmap -sV {}\" to determine next steps", ip_address);
-    let parsed_nmap = parse_basic_nmap(&filename);
     // Report on all discovered ftp ports
     if !parsed_nmap.ftp.is_empty(){
         println!("\tFtp found on port(s) {:?}", &parsed_nmap.ftp)
@@ -324,7 +317,9 @@ fn create_output_file(username: &str, filename: &String) {
 }
 
 
-fn run_basic_nmap(username: &str, ip_address: &str, filename: &String) {
+fn run_basic_nmap(username: &str, ip_address: &str) -> ServicePorts {
+    // Format filename for use in the nmap function and parser
+    let filename = format!("{}/nmap_basic", ip_address);
     // Create the basic nmap scan file, which will be used to determine what else to run
     create_output_file(username, &filename);
 
@@ -345,10 +340,11 @@ fn run_basic_nmap(username: &str, ip_address: &str, filename: &String) {
         },
         Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
     }
-}
 
+    println!("\tBasic nmap scan complete!");
 
-fn parse_basic_nmap(filename: &String) -> ServicePorts {
+    println!("Reading results from \"nmap -sV {}\" to determine next steps", ip_address);
+
     // Set an empty vector of ftp ports
     let mut ftp: Vec<String> = vec![];
     // Set an empty vector of http ports
@@ -409,7 +405,8 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 }
 
 
-fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
+fn run_tcp_all_nmap(username: &str, ip_address: &str) {
+    let filename = format!("{}/nmap_all_tcp", ip_address);
     create_output_file(username, &filename);
 
     // Obtain a file handle with write permissions
@@ -422,7 +419,7 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
             // Run an nmap command with -p-, and use the file handle for stdout
             Command::new("nmap")
                     .arg("-p-")
-                    .arg(target)
+                    .arg(ip_address)
                     .stdout(file_handle)
                     .output()
                     .expect("\"nmap -p-\" command failed to run");
@@ -434,7 +431,8 @@ fn run_tcp_all_nmap(username: &str, target: &str, filename: &String) {
 }
 
 
-fn run_showmount(username: &str, target: &str, filename: &String) {
+fn run_showmount(username: &str, ip_address: &str) {
+    let filename = format!("{}/nfs_shares", ip_address);
     create_output_file(username, &filename);
 
     // Obtain a file handle with write permissions
@@ -447,7 +445,7 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
             // Run the showmount command with -e, and use the file handle for stdout
             Command::new("showmount")
                     .arg("-e")
-                    .arg(target)
+                    .arg(ip_address)
                     .stdout(file_handle)
                     .output()
                     .expect("\"showmount -e \" command failed to run");

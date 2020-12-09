@@ -90,10 +90,8 @@ fn main(){
                        .arg(filename)
                        .output()
                        .expect("Failed to run the grep command");
-        // Capture the grep output
-        let grep = grep.stdout;
-        // Convert it to a string
-        let grep = String::from_utf8(grep).unwrap();
+        // Capture the grep output and convert it to a string
+        let grep = String::from_utf8(grep.stdout).unwrap();
 
         // If grep is empty, then the pair wasn't in /etc/hosts, so add it
         if grep.is_empty() {
@@ -178,7 +176,7 @@ fn sudo_check() {
                .arg("-u")
                .output()
                .expect("Could not run sudo check");
-    // Capture output as a vector
+    // Capture output as a vector of ascii bytes
     let sudo = sudo.stdout;
     // Exit if result was not [48, 10] (ie ascii "0\n")
     // And alert the user that more perms are needed
@@ -269,10 +267,9 @@ fn ping_check(target: &str) {
                        .arg(target)
                        .output()
                        .expect("Failed to run the ping command");
-    // Capture the ping output
-    let ping = ping.stdout;
-    // Convert it to a string
-    let ping = String::from_utf8(ping).unwrap();
+
+    // Capture the ping output and convert it to a string
+    let ping = String::from_utf8(ping.stdout).unwrap();
 
     // Exit if all 4 packets were lost
     if ping.contains("100.0% packet loss") {
@@ -286,15 +283,14 @@ fn capture_username() -> String {
     let who = Command::new("who")
               .output()
               .expect("Could not check who the current user is");
-    // Capture output as a vector
-    let who = who.stdout;
-    // Convert it to a string
-    let who = String::from_utf8(who).unwrap();
-    // Split it on the first space
-    let who_result_vector: Vec<&str> = who.split(" ").collect();
 
-    // Return username as string
-    String::from(who_result_vector[0])
+    // Capture output and convert it to a string
+    let who = String::from_utf8(who.stdout).unwrap();
+    // Convert to a vector by splitting on spaces
+    let who: Vec<&str> = who.split(" ").collect();
+
+    // Return the first element (username) as string
+    String::from(who[0])
 }
 
 
@@ -315,7 +311,7 @@ fn create_directory(username: &str, directory: &str) {
 
 fn create_output_file(username: &str, filename: &String) {
     // Prep an error string in case file creation fails for some reason
-    let create_error_message = format!("Failed to create new file {}", filename);
+    let create_error_message = format!("Failed to create file {}", filename);
 
     // Create a file as the provided user with the desired name
     Command::new("sudo")
@@ -370,7 +366,7 @@ fn parse_basic_nmap(filename: &String) -> ServicePorts {
             // Get the file contents into a buffer
             let buffer = BufReader::new(file_handle);
             // Read the buffer line by line
-            for (_, line) in buffer.lines().enumerate() {
+            for line in buffer.lines() {
                 // Skip the line if there is an error iterating over it
                 match line {
                     Ok(line) => {
@@ -462,6 +458,7 @@ fn run_showmount(username: &str, target: &str, filename: &String) {
     println!("\tCompleted scan for NFS shares");
 }
 
+
 fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
     let filename = format!("{}/nikto_{}:{}", &ip_address, &target, &port);
     let target = String::from(target);
@@ -527,16 +524,14 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
 
             println!("\tCompleted gobuster scan for {}:{}", &target, &port);
 
-            // Grab the stdout
-            let gobuster = gobuster.stdout;
-            // Convert it to a string
-            let gobuster = String::from_utf8(gobuster).unwrap();
+            // Grab the output and convert it to a string
+            let gobuster = String::from_utf8(gobuster.stdout).unwrap();
             // Remove whitespace
             let gobuster = gobuster.trim();
-            // Split it by newlines and allow it to be mutable
+            // Convert it to a vector by splitting on newlines and allow it to be mutable
             let mut gobuster: Vec<String> = gobuster.split("\n")
-                                                    .map(|s| s.trim().to_string())
-                                                    .collect();
+                                                  .map(|s| s.trim().to_string())
+                                                  .collect();
             // Make sure at a bare minimum the empty string is in there so we will scan the root dir
             if !gobuster.iter().any(|i| i == "") {
                 gobuster.push(String::from(""));
@@ -546,7 +541,7 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
         },
         Err(err) => {
             println!("Problem obtaining handle to {}: {}", filename, err);
-            vec![]
+            vec![String::from("")]
         },
     };
 
@@ -582,8 +577,9 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
 
     match file_handle {
         Ok(file_handle) => {
-            // Run the nikto command with a bunch of flags, and use the file handle for stdout
+            // Get the end results from wfuzz
             let wfuzz_result = wfuzz_result.lock().unwrap();
+            // Write the results line by line to the file
             for entry in wfuzz_result.iter() {
                 writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
             }
@@ -613,10 +609,8 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
                         .output()
                         .expect(&wfuzz_err);
 
-    // Grab the stdout
-    let wfuzz = wfuzz.stdout;
-    // Convert it to a string
-    let wfuzz = String::from_utf8(wfuzz).unwrap();
+    // Grab the output and convert it to a string
+    let wfuzz = String::from_utf8(wfuzz.stdout).unwrap();
     // Remove whitespace
     let wfuzz = wfuzz.trim();
     // Split it by newlines and allow it to be mutable

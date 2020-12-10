@@ -5,7 +5,7 @@
 
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, Write};
 use std::net::IpAddr;
 use std::process::{self, Command};
 use std::sync::{Arc, Mutex};
@@ -26,13 +26,29 @@ struct ServicePorts {
 
 
 fn main() {
-    // Make sure the script is run as sudo, exit if not
-    sudo_check();
+    // Check to see if the user was sudo
+    let sudo = sudo_check();
+    // If we got an error, alert the user and exit. Otherwise do nothing (ie continue)
+    match sudo {
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        },
+        _ => ()
+    }
+
+    // Get the user associated with the active shell session for file permissions later
+    let username = capture_username();
 
     // Collect the command line args
     let args: Vec<String> = env::args().collect();
     // Get the user entered IP address(es) and optionally hostname(s)
-    let targets = get_targets_from_command_line(&args);
+    let targets = get_targets_from_command_line(args);
+    // If there hasn't been a single target parsed, exit because we have nothing to do
+    if targets.len() == 0 {
+        println!("EXITING - Please provide at least one valid IP address as a target");
+        process::exit(1);
+    }
     println!("Targets: {:?}", targets);
     // Just take the first IP address for now
     let ip_address = &targets[0].ip.to_string();
@@ -41,15 +57,25 @@ fn main() {
 
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
-    ping_check(&ip_address);
-    println!("\tConnectivity confirmed!");
-
-    // Get the user associated with the active shell session for file permissions later
-    let username = capture_username();
+    let ping = ping_check(&ip_address);
+    match ping {
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        },
+        _ => println!("\tConnectivity confirmed!")
+    }
 
     // Create directory for storing things in
     println!("Creating directory \"{}\" to store resulting files in", ip_address);
-    create_directory(&username, &ip_address);
+    let mkdir = run_mkdir(&username, &ip_address);
+    match mkdir {
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        },
+        _ => println!("\tDirectory {} created", ip_address)
+    }
 
     // Create a vector for threads so we can keep track of them and join on them all at the end
     let mut threads = Vec::new();
@@ -86,10 +112,17 @@ fn main() {
                        .arg("-E")
                        .arg(grep_pattern)
                        .arg(filename)
-                       .output()
-                       .expect("Failed to run the grep command");
-        // Capture the grep output and convert it to a string
-        let grep = String::from_utf8(grep.stdout).unwrap();
+                       .output();
+
+        // Capture the grep output and convert it to a string if it ran
+        let grep = match grep {
+            Ok(grep) =>  String::from_utf8(grep.stdout).unwrap(),
+            Err(err) => {
+                println!("Failed to run grep command on /etc/hosts: {}", err);
+
+                String::from("Not empty")
+            }
+        };
 
         // If grep is empty, then the pair wasn't in /etc/hosts, so add it
         if grep.is_empty() {
@@ -102,8 +135,11 @@ fn main() {
                     // Let the user know you are writing the IP/hostname pair to /etc/hosts
                     println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", &ip_address, &hostname);
                     // Write the IP/hostname pair to /etc/hosts
-                    writeln!(&file_handle, "{} {}", &ip_address, &hostname).expect("Could not write to /etc/hosts");
-                    println!("\t/etc/hosts updated");
+                    let write = writeln!(&file_handle, "{} {}", &ip_address, &hostname);
+                    match write {
+                        Ok(_) => println!("\t/etc/hosts updated"),
+                        Err(err) => println!("\tCould not write to /etc/hosts: {}", err)
+                    }
                 },
                 Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
             }
@@ -163,24 +199,31 @@ fn main() {
 }
 
 
-fn sudo_check() {
+fn sudo_check() -> Result<(), String> {
     // Run "id -u"
     let sudo = Command::new("id")
                .arg("-u")
-               .output()
-               .expect("Could not run sudo check");
+               .output();
+
+    let sudo = match sudo {
+        Ok(sudo) => sudo.stdout,
+        Err(err) => return Err(format!("Could not run the \"id\" command to check privileges: {}", err))
+    };
+
     // Capture output as a vector of ascii bytes
-    let sudo = sudo.stdout;
-    // Exit if result was not [48, 10] (ie ascii "0\n")
+    //let sudo = sudo.stdout;
+    // Return an error if result was not [48, 10] (ie ascii "0\n")
     // And alert the user that more perms are needed
     if !(sudo[0] == 48 && sudo[1] == 10) {
-        println!("EXITING - I need elevated privileges. Please run me with \"sudo\"");
-        process::exit(0x0001);
+        return Err(String::from("EXITING - I need elevated privileges. Please run me with \"sudo\""))
     }
+
+    // Return Ok result if we are id 0
+    Ok(())
 }
 
 
-fn get_targets_from_command_line(args: &[String]) -> Vec<TargetMachine> {
+fn get_targets_from_command_line(args: Vec<String>) -> Vec<TargetMachine> {
     // Start a vector of targets
     let mut targets: Vec<TargetMachine> = vec![];
     // Make a "last seen" variable for look-back capability
@@ -241,79 +284,86 @@ fn get_targets_from_command_line(args: &[String]) -> Vec<TargetMachine> {
         });
     }
 
-    // If there hasn't been a single target parsed, exit because we have nothing to do
-    if targets.len() == 0 {
-        println!("EXITING - Please provide at least one valid IP address as a target");
-        process::exit(1);
-    }
-
     // Return the arguments struct, containing the IP address and hostname vectors
     targets
 }
 
 
-fn ping_check(target: &str) {
+fn ping_check(target: &str) -> Result<(), String> {
     // Ping the target 4 times
     let ping = Command::new("ping")
                        .arg("-c")
                        .arg("4")
                        .arg(target)
-                       .output()
-                       .expect("Failed to run the ping command");
+                       .output();
 
-    // Capture the ping output and convert it to a string
-    let ping = String::from_utf8(ping.stdout).unwrap();
+    let ping = match ping {
+        Ok(ping) => String::from_utf8(ping.stdout).unwrap(),
+        Err(_) => return Err(String::from("Failed to run the ping command"))
+    };
 
     // Exit if all 4 packets were lost
     if ping.contains("100.0% packet loss") {
-        println!("EXITING - 4 / 4 attempts to ping {} failed", target);
-        process::exit(1);
+        return Err(format!("EXITING - 4 / 4 attempts to ping \"{}\" failed", target))
     }
+
+    Ok(())
 }
 
 fn capture_username() -> String {
-    // Run "who -m | awk '{print $1}'"
+    // Run "who"
     let who = Command::new("who")
-              .output()
-              .expect("Could not check who the current user is");
+                      .output();
 
-    // Capture output and convert it to a string
-    let who = String::from_utf8(who.stdout).unwrap();
-    // Convert to a vector by splitting on spaces
-    let who: Vec<&str> = who.split(" ").collect();
+    match who {
+        Ok(who) => {
+            // Capture output and convert it to a string
+            let who = String::from_utf8(who.stdout).unwrap();
+            // Convert to a vector by splitting on spaces
+            let who: Vec<&str> = who.split(" ").collect();
 
-    // Return the first element (username) as string
-    String::from(who[0])
+            // Return the first element (username) as string
+            return String::from(who[0])
+        },
+        Err(_) => return String::from("root")
+    }
 }
 
 
-fn create_directory(username: &str, directory: &str) {
-    // Prep an error string in case file creation fails for some reason
-    let create_error_message = format!("Failed to create new directory {}", directory);
-
+fn run_mkdir(username: &str, directory: &str) -> Result<(), String> {
     // Create a file as the provided user with the desired name
-    Command::new("sudo")
-        .arg("-u")
-        .arg(username)
-        .arg("mkdir")
-        .arg(directory)
-        .output()
-        .expect(&create_error_message);
+    let mkdir = Command::new("sudo")
+                        .arg("-u")
+                        .arg(username)
+                        .arg("mkdir")
+                        .arg(directory)
+                        .output();
+
+    match mkdir {
+        Err(err) => return Err(format!("Failed to create new directory {}: {}", directory, err)),
+        _ => ()
+    }
+
+    Ok(())
 }
 
 
-fn create_output_file(username: &str, filename: &String) {
-    // Prep an error string in case file creation fails for some reason
-    let create_error_message = format!("Failed to create file {}", filename);
+fn create_output_file(username: &str, filename: &String) -> Result<(), String> {
 
     // Create a file as the provided user with the desired name
-    Command::new("sudo")
-        .arg("-u")
-        .arg(username)
-        .arg("touch")
-        .arg(filename)
-        .output()
-        .expect(&create_error_message);
+    let touch = Command::new("sudo")
+                        .arg("-u")
+                        .arg(username)
+                        .arg("touch")
+                        .arg(filename)
+                        .output();
+
+    match touch {
+        Err(err) => return Err(format!("Failed to create file {}: {}", filename, err)),
+        _ => ()
+    }
+
+    Ok(())
 }
 
 
@@ -321,29 +371,11 @@ fn run_basic_nmap(username: &str, ip_address: &str) -> ServicePorts {
     // Format filename for use in the nmap function and parser
     let filename = format!("{}/nmap_basic", ip_address);
     // Create the basic nmap scan file, which will be used to determine what else to run
-    create_output_file(username, &filename);
-
-    // Obtain a file handle with write permissions
-    let file_handle = OpenOptions::new()
-                                  .write(true)
-                                  .open(&filename);
-
-    match file_handle {
-        Ok(file_handle) => {
-            // Run an nmap command with -sV and -O flags, and use the file handle for stdout
-            Command::new("nmap")
-                    .arg("-sV")
-                    .arg(ip_address)
-                    .stdout(file_handle)
-                    .output()
-                    .expect("\"nmap -sV\" command failed to run");
-        },
-        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+    let create = create_output_file(username, &filename);
+    match create {
+        Ok(_) => (),
+        Err(err) => println!("{}", err)
     }
-
-    println!("\tBasic nmap scan complete!");
-
-    println!("Reading results from \"nmap -sV {}\" to determine next steps", ip_address);
 
     // Set an empty vector of ftp ports
     let mut ftp: Vec<String> = vec![];
@@ -352,41 +384,67 @@ fn run_basic_nmap(username: &str, ip_address: &str) -> ServicePorts {
     // Set an empty vector of https ports
     let mut https: Vec<String> = vec![];
 
-    // Obtain a file handle with read permissions
+    // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
-                                  .read(true)
+                                  .write(true)
                                   .open(&filename);
 
-    match file_handle {
+    let nmap = match file_handle {
         Ok(file_handle) => {
-            // Get the file contents into a buffer
-            let buffer = BufReader::new(file_handle);
-            // Read the buffer line by line
-            for line in buffer.lines() {
-                // Skip the line if there is an error iterating over it
-                match line {
-                    Ok(line) => {
-                        // Split the line into a vector by spaces
-                        let line: Vec<&str> = line.split(" ").collect();
-                        if line.contains(&"open") && line.contains(&"ftp") {
-                            // If the line indicates ftp is open, get the port and add it to the ftp vector
-                            let port = get_port_from_line(line);
-                            ftp.push(port);
-                        } else if line.contains(&"open") && line.contains(&"http") {
-                            // If the line indicates http is open, get the port and add it to the http vector
-                            let port = get_port_from_line(line);
-                            http.push(port);
-                        } else if line.contains(&"open") && line.contains(&"ssl/http") {
-                            // If the line indicates https is open, get the port and add it to the https vector
-                            let port = get_port_from_line(line);
-                            https.push(port);
-                        }
-                    },
-                    Err(_) => continue,
-                };
-            }
+            // Run an nmap command with -sV and -O flags, and use the file handle for stdout
+            let nmap = Command::new("nmap")
+                               .arg("-sV")
+                               .arg(ip_address)
+                               .stdout(file_handle)
+                               .output();
+
+            let nmap = match nmap {
+                Ok(nmap) => {
+                    println!("\tBasic nmap scan complete!");
+                    // Grab the output and convert it to a string
+                    let nmap = String::from_utf8(nmap.stdout).unwrap();
+                    // Remove whitespace
+                    let nmap = nmap.trim();
+                    // Convert it to a vector by splitting on newlines
+                    let nmap: Vec<String> = nmap.split("\n")
+                                                .map(|s| s.trim().to_string())
+                                                .collect();
+
+                    nmap
+                },
+                Err(err) => {
+                    println!("\"nmap -sV\" command failed to run: {}", err);
+
+                    return ServicePorts { ftp, http, https }
+                }
+            };
+
+            nmap
         },
-        Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
+        Err(err) => {
+            println!("Problem obtaining handle to {}: {}", filename, err);
+
+            return ServicePorts { ftp, http, https }
+        },
+    };
+
+    println!("Reading results from \"nmap -sV {}\" to determine next steps", ip_address);
+
+    for line in nmap.iter() {
+        let line: Vec<&str> = line.split(" ").collect();
+        if line.contains(&"open") && line.contains(&"ftp") {
+            // If the line indicates ftp is open, get the port and add it to the ftp vector
+            let port = get_port_from_line(line);
+            ftp.push(port);
+        } else if line.contains(&"open") && line.contains(&"http") {
+            // If the line indicates http is open, get the port and add it to the http vector
+            let port = get_port_from_line(line);
+            http.push(port);
+        } else if line.contains(&"open") && line.contains(&"ssl/http") {
+            // If the line indicates https is open, get the port and add it to the https vector
+            let port = get_port_from_line(line);
+            https.push(port);
+        }
     }
 
     // Return the vectors for all of the services we looked for
@@ -407,7 +465,11 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 
 fn run_tcp_all_nmap(username: &str, ip_address: &str) {
     let filename = format!("{}/nmap_all_tcp", ip_address);
-    create_output_file(username, &filename);
+    let create = create_output_file(username, &filename);
+    match create {
+        Ok(_) => (),
+        Err(err) => println!("{}", err)
+    }
 
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
@@ -417,23 +479,28 @@ fn run_tcp_all_nmap(username: &str, ip_address: &str) {
     match file_handle {
         Ok(file_handle) => {
             // Run an nmap command with -p-, and use the file handle for stdout
-            Command::new("nmap")
-                    .arg("-p-")
-                    .arg(ip_address)
-                    .stdout(file_handle)
-                    .output()
-                    .expect("\"nmap -p-\" command failed to run");
+            let nmap = Command::new("nmap")
+                               .arg("-p-")
+                               .arg(ip_address)
+                               .stdout(file_handle)
+                               .output();
+            match nmap {
+                Ok(_) => println!("\tCompleted nmap scan for all TCP ports"),
+                Err(err) => println!("\t\"nmap -p-\" command failed to run: {}", err)
+            }
         },
         Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
     }
-
-    println!("\tCompleted nmap scan for all TCP ports");
 }
 
 
 fn run_showmount(username: &str, ip_address: &str) {
     let filename = format!("{}/nfs_shares", ip_address);
-    create_output_file(username, &filename);
+    let create = create_output_file(username, &filename);
+    match create {
+        Ok(_) => (),
+        Err(err) => println!("{}", err)
+    }
 
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
@@ -443,12 +510,16 @@ fn run_showmount(username: &str, ip_address: &str) {
     match file_handle {
         Ok(file_handle) => {
             // Run the showmount command with -e, and use the file handle for stdout
-            Command::new("showmount")
-                    .arg("-e")
-                    .arg(ip_address)
-                    .stdout(file_handle)
-                    .output()
-                    .expect("\"showmount -e \" command failed to run");
+            let showmount = Command::new("showmount")
+                                    .arg("-e")
+                                    .arg(ip_address)
+                                    .stdout(file_handle)
+                                    .output();
+
+            match showmount {
+                Ok(_) => println!("\tCompleted showmount scan for NFS shares"),
+                Err(err) => println!("\t\"showmount -e\" command failed to run: {}", err)
+            }
         },
         Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
     }
@@ -461,7 +532,11 @@ fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
     let filename = format!("{}/nikto_{}:{}", &ip_address, &target, &port);
     let target = String::from(target);
     let port = String::from(port);
-    create_output_file(username, &filename);
+    let create = create_output_file(username, &filename);
+    match create {
+        Ok(_) => (),
+        Err(err) => println!("{}", err)
+    }
 
     println!("Starting a nikto scan on {}:{}", &target, &port);
 
@@ -473,14 +548,18 @@ fn run_nikto(username: &str, ip_address: &str, target: &str, port: &str) {
     match file_handle {
         Ok(file_handle) => {
             // Run the nikto command with a bunch of flags, and use the file handle for stdout
-            Command::new("nikto")
-                    .arg("-host")
-                    .arg(&target)
-                    .arg("-port")
-                    .arg(&port)
-                    .stdout(file_handle)
-                    .output()
-                    .expect("nikto command failed to run");
+            let nikto = Command::new("nikto")
+                                .arg("-host")
+                                .arg(&target)
+                                .arg("-port")
+                                .arg(&port)
+                                .stdout(file_handle)
+                                .output();
+
+            match nikto {
+                Ok(_) => println!("\tNikto scan on {}:{} complete!", &target, &port),
+                Err(err) => println!("\tFailed to run nikto scan on {}:{}: {}", &target, &port, err)
+            }
         },
         Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
     }
@@ -493,7 +572,11 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
     let filename = format!("{}/dirs_{}:{}", &ip_address, &target, &port);
     let target = String::from(target);
     let port = String::from(port);
-    create_output_file(username, &filename);
+    let create = create_output_file(username, &filename);
+    match create {
+        Ok(_) => (),
+        Err(err) => println!("{}", err)
+    }
 
     println!("Starting gobuster directory scan on {}:{}", &target, &port);
 
@@ -517,23 +600,33 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
                                    .arg("-u")
                                    .arg(&gobuster_arg)
                                    .stdout(file_handle)
-                                   .output()
-                                   .expect("gobuster command failed to run");
+                                   .output();
+
+            let gobuster = match gobuster {
+                Ok(gobuster) => {
+                    // Grab the output and convert it to a string
+                    let gobuster = String::from_utf8(gobuster.stdout).unwrap();
+                    // Remove whitespace
+                    let gobuster = gobuster.trim();
+                    // Convert it to a vector by splitting on newlines and allow it to be mutable
+                    let mut gobuster: Vec<String> = gobuster.split("\n")
+                                                          .map(|s| s.trim().to_string())
+                                                          .collect();
+                    // Make sure at a bare minimum the empty string is in there so we will scan the root dir
+                    if !gobuster.iter().any(|i| i == "") {
+                        gobuster.push(String::from(""));
+                    }
+
+                    gobuster
+                },
+                Err(err) => {
+                    println!("Failed to run gobuster on {}: {}", gobuster_arg, err);
+
+                    vec![String::from("")]
+                }
+            };
 
             println!("\tCompleted gobuster scan for {}:{}", &target, &port);
-
-            // Grab the output and convert it to a string
-            let gobuster = String::from_utf8(gobuster.stdout).unwrap();
-            // Remove whitespace
-            let gobuster = gobuster.trim();
-            // Convert it to a vector by splitting on newlines and allow it to be mutable
-            let mut gobuster: Vec<String> = gobuster.split("\n")
-                                                  .map(|s| s.trim().to_string())
-                                                  .collect();
-            // Make sure at a bare minimum the empty string is in there so we will scan the root dir
-            if !gobuster.iter().any(|i| i == "") {
-                gobuster.push(String::from(""));
-            }
 
             gobuster
         },
@@ -567,7 +660,11 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
     }
 
     let filename = format!("{}/files_{}:{}", &ip_address, &target, &port);
-    create_output_file(username, &filename);
+    let create = create_output_file(username, &filename);
+    match create {
+        Ok(_) => (),
+        Err(err) => println!("{}", err)
+    }
     let file_handle = OpenOptions::new()
                                   .create(true)
                                   .append(true)
@@ -579,7 +676,11 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
             let wfuzz_result = wfuzz_result.lock().unwrap();
             // Write the results line by line to the file
             for entry in wfuzz_result.iter() {
-                writeln!(&file_handle, "{}", entry).expect("Error writing line to wfuzz file");
+                let write = writeln!(&file_handle, "{}", entry);
+                match write {
+                    Ok(_) => continue,
+                    Err(err) => println!("Failed to write \"{}\" to {}: {}", entry, filename, err)
+                }
             }
         },
         Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
@@ -591,8 +692,6 @@ fn run_gobuster_wfuzz(username: &str, ip_address: &str, target: &str, port: &str
 fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
     // Format a string to pass to wfuzz
     let wfuzz_arg = format!("http://{}:{}{}/FUZZ", target, port, dir);
-    // Format a string in case of error
-    let wfuzz_err = format!("Failed to run wfuzz on {} port {}'s {} directory", target, port, dir);
     // Wfuzz + a million arguments
     let wfuzz = Command::new("wfuzz")
                         .arg("-w")
@@ -604,29 +703,38 @@ fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
                         .arg("-o")
                         .arg("raw")
                         .arg(wfuzz_arg)
-                        .output()
-                        .expect(&wfuzz_err);
+                        .output();
 
-    // Grab the output and convert it to a string
-    let wfuzz = String::from_utf8(wfuzz.stdout).unwrap();
-    // Remove whitespace
-    let wfuzz = wfuzz.trim();
-    // Split it by newlines and allow it to be mutable
-    let wfuzz: Vec<String> = wfuzz.split("\n")
-                                  .map(|s| s.trim().to_string())
-                                  .collect();
+    match wfuzz {
+        Ok(wfuzz) => {
+            // Grab the output and convert it to a string
+            let wfuzz = String::from_utf8(wfuzz.stdout).unwrap();
+            // Remove whitespace
+            let wfuzz = wfuzz.trim();
+            // Split it by newlines and allow it to be mutable
+            let wfuzz: Vec<String> = wfuzz.split("\n")
+                                          .map(|s| s.trim().to_string())
+                                          .collect();
 
-    // Some of this is garbage banner stuff, so filter that out
-    let header_elements_end = 5;
-    let footer_elements_begin = wfuzz.len() - 4;
-    // The first and third banner entries are useful, grab those
-    let mut wfuzz_out = vec![wfuzz[0].clone(), wfuzz[2].clone()];
-    // Only include the other parts that are not part of the banner
-    for found in wfuzz[header_elements_end..footer_elements_begin].iter() {
-        wfuzz_out.push(String::from(found));
+            // Some of this is garbage banner stuff, so filter that out
+            let header_elements_end = 5;
+            let footer_elements_begin = wfuzz.len() - 4;
+            // The first and third banner entries are useful, grab those
+            let mut wfuzz_out = vec![wfuzz[0].clone(), wfuzz[2].clone()];
+            // Only include the other parts that are not part of the banner
+            for found in wfuzz[header_elements_end..footer_elements_begin].iter() {
+                wfuzz_out.push(String::from(found));
+            }
+
+            println!("\tCompleted wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
+            // Return filtered parts
+            return wfuzz_out
+        },
+        Err(err) => {
+            println!("\tFailed to run wfuzz scan for http://{}:{}{}/: {}", &target, &port, &dir, err);
+
+            return vec![]
+        }
     }
 
-    println!("\tCompleted wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
-    // Return filtered parts
-    wfuzz_out
 }

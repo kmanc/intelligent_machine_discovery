@@ -4,6 +4,7 @@
 */
 
 use std::env;
+use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::net::IpAddr;
@@ -11,39 +12,38 @@ use std::process::{self, Command};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-#[derive(Debug)]
-struct TargetMachine {
-    ip: IpAddr,
-    hostname: Option<String>,
-}
-
-
-struct ServicePorts {
-    ftp: Vec<String>,
-    http: Vec<String>,
-    https: Vec<String>,
-}
+use imd::{Arguments, ServicePorts, TargetMachine};
 
 
 fn main() {
     // Check to see if the user was sudo
-    let sudo = sudo_check();
     // If we got an error, alert the user and exit. Otherwise do nothing (ie continue)
-    match sudo {
-        Err(err) => {
-            println!("{}", err);
-            process::exit(1);
-        },
-        _ => ()
+    if let Err(e) = imd::sudo_check() {
+        println!("{}", e);
+        process::exit(1);
     }
 
-    // Get the user associated with the active shell session for file permissions later
-    let username = capture_username();
+    // Get the user associated with the active shell session for file permissions later or use root if we fail
+    let username = imd::capture_username();
+    let username = match username {
+        Ok(username) => username,
+        Err(e) => {
+            println!("Using \"root\" for file permissions because of error: {}", e);
+            String::from("root")
+        }
+    };
 
     // Collect the command line args
     let args: Vec<String> = env::args().collect();
     // Get the user entered IP address(es) and optionally hostname(s)
-    let targets = get_targets_from_command_line(args);
+    let args = imd::parse_command_line(args);
+    let targets = match args {
+        Ok(args) => args.targets,
+        Err(e) => {
+            println!("{}", e);
+            process::exit(1);
+        }
+    };
     // If there hasn't been a single target parsed, exit because we have nothing to do
     if targets.len() == 0 {
         println!("EXITING - Please provide at least one valid IP address as a target");
@@ -148,7 +148,17 @@ fn main() {
 
     // Run a basic nmap scan with service discovery
     println!("Running \"nmap -sV {}\" for basic target information", ip_address);
-    let parsed_nmap = run_basic_nmap(&username, &ip_address);
+    //let parsed_nmap = run_basic_nmap(&username, &ip_address);
+    let parsed_nmap = imd::basic_nmap(&username, &ip_address);
+    let parsed_nmap = match parsed_nmap {
+        Ok(parsed_nmap) => parsed_nmap,
+        Err(e) => {
+            println!("{}", e);
+            // TODO remove this and replace it with just empty ServicePorts instance
+            process::exit(1);
+        }
+    };
+
 
     // Report on all discovered ftp ports
     if !parsed_nmap.ftp.is_empty(){
@@ -199,96 +209,6 @@ fn main() {
 }
 
 
-fn sudo_check() -> Result<(), String> {
-    // Run "id -u"
-    let sudo = Command::new("id")
-               .arg("-u")
-               .output();
-
-    let sudo = match sudo {
-        Ok(sudo) => sudo.stdout,
-        Err(err) => return Err(format!("Could not run the \"id\" command to check privileges: {}", err))
-    };
-
-    // Capture output as a vector of ascii bytes
-    //let sudo = sudo.stdout;
-    // Return an error if result was not [48, 10] (ie ascii "0\n")
-    // And alert the user that more perms are needed
-    if !(sudo[0] == 48 && sudo[1] == 10) {
-        return Err(String::from("EXITING - I need elevated privileges. Please run me with \"sudo\""))
-    }
-
-    // Return Ok result if we are id 0
-    Ok(())
-}
-
-
-fn get_targets_from_command_line(args: Vec<String>) -> Vec<TargetMachine> {
-    // Start a vector of targets
-    let mut targets: Vec<TargetMachine> = vec![];
-    // Make a "last seen" variable for look-back capability
-    let mut last: Option<IpAddr> = None;
-    // Iterate over the arguments we were given (skipping the first because it will be the executable name)
-    for arg in args[1..].iter() {
-        // Trim the arg in case of whitespace nonsense
-        let arg = arg.trim();
-        // Attempt to parse the argument as an IP address
-        let ip = arg.parse::<IpAddr>();
-        // Match on the IP address, which is either a valid IP or an error
-        match ip {
-            // If the IP address is valid
-            Ok(ip) => {
-                // If last is None
-                if last == None {
-                    // Set last to the IP address
-                    last = Some(ip);
-                }
-                // Otherwise if last is not None
-                else if last != None {
-                    // Add a target machine to the list with last as its IP address and None as its hostname
-                    targets.push(TargetMachine{
-                        ip: last.unwrap(),
-                        hostname: None,
-                    });
-                    // Then set last as the IP address
-                    last = Some(ip);
-                }
-            }
-            // If the IP address is an error
-            Err(_) => {
-                // If last is None
-                if last == None {
-                    // Exit because either the person typo'd an IP address or entered two straight hostnames
-                    println!("EXITING - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg);
-                    process::exit(1);
-                }
-                // Otherwise if last is not None
-                else if last != None {
-                    // Add a target machine to the list with last as its IP address and the argument as its hostname
-                    targets.push(TargetMachine{
-                        ip: last.unwrap(),
-                        hostname: Some(String::from(arg)),
-                    });
-                    // Set last to None
-                    last = None;
-                }
-            }
-        }
-    }
-
-    // If the last argument supplied was an IP address it needs to be added to the list with no hostname
-    if last != None {
-        targets.push(TargetMachine{
-                ip: last.unwrap(),
-                hostname: None,
-        });
-    }
-
-    // Return the arguments struct, containing the IP address and hostname vectors
-    targets
-}
-
-
 fn ping_check(target: &str) -> Result<(), String> {
     // Ping the target 4 times
     let ping = Command::new("ping")
@@ -308,25 +228,6 @@ fn ping_check(target: &str) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-fn capture_username() -> String {
-    // Run "who"
-    let who = Command::new("who")
-                      .output();
-
-    match who {
-        Ok(who) => {
-            // Capture output and convert it to a string
-            let who = String::from_utf8(who.stdout).unwrap();
-            // Convert to a vector by splitting on spaces
-            let who: Vec<&str> = who.split(" ").collect();
-
-            // Return the first element (username) as string
-            return String::from(who[0])
-        },
-        Err(_) => return String::from("root")
-    }
 }
 
 

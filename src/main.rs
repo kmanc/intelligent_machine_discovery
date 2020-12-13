@@ -12,69 +12,53 @@ use std::process::{self, Command};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use imd::{Arguments, ServicePorts, TargetMachine};
+use imd::{Config, ServicePorts, TargetMachine};
 
 
 fn main() {
     // Check to see if the user was sudo
-    // If we got an error, alert the user and exit. Otherwise do nothing (ie continue)
+    // If we got an error, alert the user and exit
     if let Err(e) = imd::sudo_check() {
         println!("{}", e);
         process::exit(1);
     }
 
-    // Get the user associated with the active shell session for file permissions later or use root if we fail
-    let username = imd::capture_username();
-    let username = match username {
-        Ok(username) => username,
-        Err(e) => {
-            println!("Using \"root\" for file permissions because of error: {}", e);
-            String::from("root")
-        }
-    };
-
     // Collect the command line args
     let args: Vec<String> = env::args().collect();
     // Get the user entered IP address(es) and optionally hostname(s)
-    let args = imd::parse_command_line(args);
-    let targets = match args {
-        Ok(args) => args.targets,
+    let config = Config::new(&args);
+    let config = match config {
+        Ok(config) => config,
         Err(e) => {
             println!("{}", e);
             process::exit(1);
         }
     };
-    // If there hasn't been a single target parsed, exit because we have nothing to do
-    if targets.len() == 0 {
-        println!("EXITING - Please provide at least one valid IP address as a target");
-        process::exit(1);
-    }
+
+    let targets = &config.targets;
+
     println!("Targets: {:?}", targets);
+    // Just take the first target for now
+    let first_target = &targets[0];
     // Just take the first IP address for now
     let ip_address = &targets[0].ip.to_string();
     // Just take the first hostname if it was entered
     let hostname = &String::from(targets[0].hostname.as_deref().unwrap_or("None"));
+    // Just take the username for now
+    let username = &config.username;
 
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
-    let ping = ping_check(&ip_address);
-    match ping {
-        Err(err) => {
-            println!("{}", err);
-            process::exit(1);
-        },
-        _ => println!("\tConnectivity confirmed!")
+    if let Err(e) = first_target.check_connection() {
+        println!("{}", e);
+        process::exit(1);
     }
 
     // Create directory for storing things in
     println!("Creating directory \"{}\" to store resulting files in", ip_address);
-    let mkdir = run_mkdir(&username, &ip_address);
-    match mkdir {
-        Err(err) => {
-            println!("{}", err);
-            process::exit(1);
-        },
-        _ => println!("\tDirectory {} created", ip_address)
+    if let Err(e) = config.create_dir(&ip_address) {
+        println!("{}", e);
+        process::exit(1);
     }
 
     // Create a vector for threads so we can keep track of them and join on them all at the end
@@ -84,7 +68,7 @@ fn main() {
     println!("Kicking off thread for scanning all TCP ports");
     threads.push(thread::spawn({
         // Clone variables so the thread can use them without borrowing/ttl issues
-        let (tcp_thread_username, tcp_thread_ip) = (username.clone(), ip_address.clone());
+        let (tcp_thread_username, tcp_thread_ip) = (config.username.clone(), ip_address.clone());
         move|| {
             run_tcp_all_nmap(&tcp_thread_username, &tcp_thread_ip);
         }
@@ -94,62 +78,21 @@ fn main() {
     println!("Kicking off thread for listing NFS shares");
     threads.push(thread::spawn({
         // Clone variables so the thread can use them without borrowing/ttl issues
-        let (showmount_thread_username, showmount_thread_ip) = (username.clone(), ip_address.clone());
+        let (showmount_thread_username, showmount_thread_ip) = (config.username.clone(), ip_address.clone());
         move|| {
             run_showmount(&showmount_thread_username, &showmount_thread_ip);
         }
     }));
 
-    // If the user entered a hostname, add it to /etc/hosts
-    if hostname != "None" {
-    //if !hostname.is_empty() {
-        // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
-        let filename = "/etc/hosts";
-        // Create a pattern to see if the IP/hostname pair is in /etc/hosts
-        let grep_pattern = format!("({})\\s({})$", ip_address, hostname);
-        // Run the grep command
-        let grep = Command::new("grep")
-                       .arg("-E")
-                       .arg(grep_pattern)
-                       .arg(filename)
-                       .output();
-
-        // Capture the grep output and convert it to a string if it ran
-        let grep = match grep {
-            Ok(grep) =>  String::from_utf8(grep.stdout).unwrap(),
-            Err(err) => {
-                println!("Failed to run grep command on /etc/hosts: {}", err);
-
-                String::from("Not empty")
-            }
-        };
-
-        // If grep is empty, then the pair wasn't in /etc/hosts, so add it
-        if grep.is_empty() {
-            // Obtain a file handle with appending write to /etc/hosts
-            let file_handle = OpenOptions::new()
-                                          .append(true)
-                                          .open(filename);
-            match file_handle {
-                Ok(file_handle) => {
-                    // Let the user know you are writing the IP/hostname pair to /etc/hosts
-                    println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", &ip_address, &hostname);
-                    // Write the IP/hostname pair to /etc/hosts
-                    let write = writeln!(&file_handle, "{} {}", &ip_address, &hostname);
-                    match write {
-                        Ok(_) => println!("\t/etc/hosts updated"),
-                        Err(err) => println!("\tCould not write to /etc/hosts: {}", err)
-                    }
-                },
-                Err(err) => println!("Problem obtaining handle to {}: {}", filename, err),
-            }
+    if first_target.hostname.is_some() {
+        if let Err(e) = first_target.add_to_hosts() {
+            println!("{}", e);
         }
     }
 
     // Run a basic nmap scan with service discovery
     println!("Running \"nmap -sV {}\" for basic target information", ip_address);
-    //let parsed_nmap = run_basic_nmap(&username, &ip_address);
-    let parsed_nmap = imd::basic_nmap(&username, &ip_address);
+    let parsed_nmap = first_target.nmap_scan_basic(&username);
     let parsed_nmap = match parsed_nmap {
         Ok(parsed_nmap) => parsed_nmap,
         Err(e) => {
@@ -183,7 +126,7 @@ fn main() {
             println!("Kicking off thread for nikto scan on {}:{}", &web_host, &port);
             threads.push(thread::spawn({
                 // Clone variables so the thread can use them without borrowing/ttl issues
-                let (nikto_thread_username, nikto_thread_ip, nikto_thread_host, nikto_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
+                let (nikto_thread_username, nikto_thread_ip, nikto_thread_host, nikto_thread_port) = (config.username.clone(), ip_address.clone(), web_host.clone(), port.clone());
                 move || {
                     run_nikto(&nikto_thread_username, &nikto_thread_ip, &nikto_thread_host, &nikto_thread_port);
                 }
@@ -191,7 +134,7 @@ fn main() {
             println!("Kicking off thread for gobuster/wfuzz scans on {}:{}", &web_host, &port);
             threads.push(thread::spawn({
                 // Clone variables so the thread can use them without borrowing/ttl issues
-                let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (username.clone(), ip_address.clone(), web_host.clone(), port.clone());
+                let (web_thread_username, web_thread_ip, web_thread_host, web_thread_port) = (config.username.clone(), ip_address.clone(), web_host.clone(), port.clone());
                 move || {
                     run_gobuster_wfuzz(&web_thread_username, &web_thread_ip, &web_thread_host, &web_thread_port);
                 }
@@ -205,47 +148,8 @@ fn main() {
         thread.join().unwrap();
     }
 
+    // Fix stdout because it somehow gets messed up
     io::stdout().flush().unwrap();
-}
-
-
-fn ping_check(target: &str) -> Result<(), String> {
-    // Ping the target 4 times
-    let ping = Command::new("ping")
-                       .arg("-c")
-                       .arg("4")
-                       .arg(target)
-                       .output();
-
-    let ping = match ping {
-        Ok(ping) => String::from_utf8(ping.stdout).unwrap(),
-        Err(_) => return Err(String::from("Failed to run the ping command"))
-    };
-
-    // Exit if all 4 packets were lost
-    if ping.contains("100.0% packet loss") {
-        return Err(format!("EXITING - 4 / 4 attempts to ping \"{}\" failed", target))
-    }
-
-    Ok(())
-}
-
-
-fn run_mkdir(username: &str, directory: &str) -> Result<(), String> {
-    // Create a file as the provided user with the desired name
-    let mkdir = Command::new("sudo")
-                        .arg("-u")
-                        .arg(username)
-                        .arg("mkdir")
-                        .arg(directory)
-                        .output();
-
-    match mkdir {
-        Err(err) => return Err(format!("Failed to create new directory {}: {}", directory, err)),
-        _ => ()
-    }
-
-    Ok(())
 }
 
 

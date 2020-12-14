@@ -4,15 +4,12 @@
 */
 
 use std::env;
-use std::error::Error;
-use std::fs::OpenOptions;
 use std::io::{self, Write};
-use std::net::IpAddr;
-use std::process::{self, Command};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::process;
+//use std::sync::{Arc, Mutex};
+//use std::thread;
 
-use imd::{Config, ServicePorts, TargetMachine};
+use imd::{Config};
 
 
 fn main() {

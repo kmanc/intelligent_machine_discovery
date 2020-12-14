@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::{self, Write};
+use std::io::Write;
 use std::net::IpAddr;
-use std::process::{self, Command};
+use std::process::Command;
 
 #[derive(Debug)]
 pub struct Config {

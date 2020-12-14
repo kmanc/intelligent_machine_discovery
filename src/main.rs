@@ -19,7 +19,7 @@ fn main() {
     // Check to see if the user was sudo
     // If we got an error, alert the user and exit
     if let Err(e) = imd::sudo_check() {
-        println!("{}", e);
+        eprintln!("{}", e);
         process::exit(1);
     }
 
@@ -30,7 +30,7 @@ fn main() {
     let config = match config {
         Ok(config) => config,
         Err(e) => {
-            println!("{}", e);
+            eprintln!("{}", e);
             process::exit(1);
         }
     };
@@ -50,14 +50,14 @@ fn main() {
     // Ping the machine to make sure it is alive
     println!("Verifying connectivity to {}", ip_address);
     if let Err(e) = first_target.check_connection() {
-        println!("{}", e);
+        eprintln!("{}", e);
         process::exit(1);
     }
 
     // Create directory for storing things in
     println!("Creating directory \"{}\" to store resulting files in", ip_address);
     if let Err(e) = config.create_dir(&ip_address) {
-        println!("{}", e);
+        eprintln!("{}", e);
         process::exit(1);
     }
 
@@ -86,7 +86,7 @@ fn main() {
 
     if first_target.hostname.is_some() {
         if let Err(e) = first_target.add_to_hosts() {
-            println!("{}", e);
+            eprintln!("{}", e);
         }
     }
 
@@ -96,7 +96,7 @@ fn main() {
     let parsed_nmap = match parsed_nmap {
         Ok(parsed_nmap) => parsed_nmap,
         Err(e) => {
-            println!("{}", e);
+            eprintln!("{}", e);
             // TODO remove this and replace it with just empty ServicePorts instance
             process::exit(1);
         }

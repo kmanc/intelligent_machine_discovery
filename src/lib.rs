@@ -276,7 +276,7 @@ impl TargetMachine {
 
     pub fn showmount_scan(&self, username: &str) -> Result<(), Box<dyn Error>> {
         let filename = format!("{}/nfs_shares", self.ip);
-        create_output_file = (username, &filename)?;
+        create_output_file(username, &filename)?;
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()

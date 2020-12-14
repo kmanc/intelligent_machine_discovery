@@ -170,7 +170,75 @@ impl TargetMachine {
     }
 
 
-    fn run_nikto(&self, username: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
+    pub fn gobuster_wfuzz_scans(&self, username: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
+        let filename = format!("{}/dirs_{}:{}", &self.ip, &target, &port);
+        let target = String::from(target);
+        let port = String::from(port);
+        create_output_file(username, &filename)?;
+
+        println!("Starting gobuster directory scan on {}:{}", &target, &port);
+
+        // Obtain a file handle with write permissions
+        let file_handle = OpenOptions::new()
+                                      .write(true)
+                                      .open(&filename)?;
+
+        // Run gobuster with a slew of flags
+        let gobuster_arg = format!("http://{}:{}", &target, &port);
+        let gobuster = Command::new("gobuster")
+                               .arg("dir")
+                               .arg("-q")
+                               .arg("-t")
+                               .arg("25")
+                               .arg("-r")
+                               .arg("-w")
+                               .arg("/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt")
+                               .arg("-u")
+                               .arg(&gobuster_arg)
+                               .stdout(file_handle)
+                               .output()?;
+
+        // Grab the output and convert it to a string
+        let gobuster = String::from_utf8(gobuster.stdout).unwrap();
+        // Remove whitespace
+        let gobuster = gobuster.trim();
+        // Convert it to a vector by splitting on newlines and allow it to be mutable
+        let mut gobuster: Vec<String> = gobuster.split("\n")
+                                              .map(|s| s.trim().to_string())
+                                              .collect();
+        // Make sure at a bare minimum the empty string is in there so we will scan the root dir
+        if !gobuster.iter().any(|i| i == "") {
+            gobuster.push(String::from(""));
+        }
+
+        println!("\tCompleted gobuster scan for {}:{}", &target, &port);
+
+        // We're going to spin up a bunch of threads that need to share a common output
+        let mut wfuzz_result = vec![];
+
+        for dir in gobuster.iter() {
+            println!("Starting wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
+            wfuzz_result.extend(run_wfuzz(&dir, &target, &port));
+        }
+
+
+        let filename = format!("{}/files_{}:{}", &self.ip, &target, &port);
+        create_output_file(username, &filename)?;
+        let file_handle = OpenOptions::new()
+                                      .create(true)
+                                      .append(true)
+                                      .open(&filename)?;
+
+        // Write the results line by line to the file
+        for entry in wfuzz_result.iter() {
+            writeln!(&file_handle, "{}", entry)?;
+        }
+
+        Ok(())
+    }
+
+
+    pub fn nikto_scan(&self, username: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
         let filename = format!("{}/nikto_{}:{}", &self.ip, &target, &port);
         let target = String::from(target);
         let port = String::from(port);
@@ -284,11 +352,11 @@ impl TargetMachine {
                                       .open(&filename)?;
 
         // Run the showmount command with -e, and use the file handle for stdout
-        let showmount = Command::new("showmount")
-                                .arg("-e")
-                                .arg(self.ip.to_string())
-                                .stdout(file_handle)
-                                .output()?;
+        Command::new("showmount")
+                .arg("-e")
+                .arg(self.ip.to_string())
+                .stdout(file_handle)
+                .output()?;
 
         println!("\tCompleted scan for NFS shares");
         Ok(())
@@ -349,4 +417,54 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 
     // Return Ok result if we are id 0
     Ok(())
+}
+
+
+fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
+    // Format a string to pass to wfuzz
+    let wfuzz_arg = format!("http://{}:{}{}/FUZZ", target, port, dir);
+    // Wfuzz + a million arguments
+    let wfuzz = Command::new("wfuzz")
+                        .arg("-w")
+                        .arg("/usr/share/wordlists/seclists/raft-medium-files.txt")
+                        .arg("-t")
+                        .arg("20")
+                        .arg("--hc")
+                        .arg("301,302,404")
+                        .arg("-o")
+                        .arg("raw")
+                        .arg(wfuzz_arg)
+                        .output();
+
+    match wfuzz {
+        Ok(wfuzz) => {
+            // Grab the output and convert it to a string
+            let wfuzz = String::from_utf8(wfuzz.stdout).unwrap();
+            // Remove whitespace
+            let wfuzz = wfuzz.trim();
+            // Split it by newlines and allow it to be mutable
+            let wfuzz: Vec<String> = wfuzz.split("\n")
+                                          .map(|s| s.trim().to_string())
+                                          .collect();
+
+            // Some of this is garbage banner stuff, so filter that out
+            let header_elements_end = 5;
+            let footer_elements_begin = wfuzz.len() - 4;
+            // The first and third banner entries are useful, grab those
+            let mut wfuzz_out = vec![wfuzz[0].clone(), wfuzz[2].clone()];
+            // Only include the other parts that are not part of the banner
+            for found in wfuzz[header_elements_end..footer_elements_begin].iter() {
+                wfuzz_out.push(String::from(found));
+            }
+
+            println!("\tCompleted wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
+            // Return filtered parts
+            return wfuzz_out
+        },
+        Err(err) => {
+            println!("\tFailed to run wfuzz scan for http://{}:{}{}/: {}", &target, &port, &dir, err);
+
+            return vec![]
+        }
+    }
 }

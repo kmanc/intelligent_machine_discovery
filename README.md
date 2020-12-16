@@ -21,8 +21,6 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
     - [/usr/share/wordlists/seclists/raft-medium-files.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-files.txt)
 
 #### TODO
-- General code cleanup
-    - Most of v1 is hacked together to get it to work. It's not pretty (yet)
   Bugfixes
     - I'm pretty sure some of the concurrency does not work as intended
     - There is bound to be more
@@ -45,5 +43,3 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
     - Colorize high interest text?
 - "TLDR" output
     - Basically a quick reference of highlights
-- Rust best practices
-    - I'm sure there's plenty

@@ -332,8 +332,6 @@ impl TargetMachine {
         create_output_file(username, &filename)?;
 
         let mut service_hashmap: HashMap<String, Vec<String>> = HashMap::new();
-        // We put spaces in front of each service to make sure we don't double count http and ssl/http later
-        let services = vec![" ftp", " ssh", " http", " ssl/http"];
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()
@@ -365,12 +363,16 @@ impl TargetMachine {
 
         println!("Reading results from \"nmap -sV {}\" to determine next steps", self.ip);
 
+        // We put spaces in front of each service to make sure we don't double count http and ssl/http later
+        let services = vec!["ftp", "ssh", "http", "ssl/http"];
+
         for service in services {
             for line in nmap.iter() {
                 if line.starts_with("|") {
                     continue;
                 }
-                if line.contains(&"open") && line.contains(service) {
+                let line: Vec<&str> = line.split(" ").collect();
+                if line.contains(&"open") && line.contains(&service) {
                     let port = get_port_from_line(line);
                     service_hashmap.entry(service.trim().to_string()).or_default().push(port);
                 }
@@ -528,8 +530,7 @@ fn create_output_file(username: &str, filename: &String) -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn get_port_from_line(line: &String) -> String {
-    let line: Vec<&str> = line.split(" ").collect();
+fn get_port_from_line(line: Vec<&str>) -> String {
     // Convert the first element of the vector to a string
     let port = String::from(line[0]);
     // Split the first element at slashes

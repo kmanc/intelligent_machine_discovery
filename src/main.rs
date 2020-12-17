@@ -80,7 +80,7 @@ fn main() {
      */
 
     // Run a basic nmap scan with service discovery
-    println!("Running \"nmap -A {}\" for information on common ports", ip_address);
+    println!("Running \"nmap -sV {}\" for information on common ports", ip_address);
     let parsed_nmap = first_target.nmap_scan_common(&username);
     let parsed_nmap = match parsed_nmap {
         Ok(parsed_nmap) => parsed_nmap,

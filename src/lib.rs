@@ -342,7 +342,15 @@ impl TargetMachine {
 
         // Run an nmap command with -A flag, and use the file handle for stdout
         let nmap = Command::new("nmap")
-                           .arg("-A")
+                           .arg("-sV")
+                           .arg("--script")
+                           .arg("finger")
+                           .arg("--script")
+                           .arg("http-robots.txt")
+                           .arg("--script")
+                           .arg("http-title")
+                           .arg("--script")
+                           .arg("ssl-cert")
                            .arg(self.ip.to_string())
                            .output()?;
 

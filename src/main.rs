@@ -66,8 +66,8 @@ fn main() {
     println!("TODO: uncomment the showmount and TCP all scans when I don't need fast testing");
     /*
     // nmap scan on all tcp ports
-    println!("Scanning all TCP ports");
-    if let Err(e) = first_target.nmap_scan_all_ports(&username) {
+    println!("Running \"nmap -p- {}\" for information on all TCP", ip_address);
+    if let Err(e) = first_target.nmap_scan_all_tcp(&username) {
         eprintln!("{}", e);
     }
 
@@ -80,8 +80,8 @@ fn main() {
      */
 
     // Run a basic nmap scan with service discovery
-    println!("Running \"nmap -sV {}\" for basic target information", ip_address);
-    let parsed_nmap = first_target.nmap_scan_basic(&username);
+    println!("Running \"nmap -A {}\" for information on common ports", ip_address);
+    let parsed_nmap = first_target.nmap_scan_common(&username);
     let parsed_nmap = match parsed_nmap {
         Ok(parsed_nmap) => parsed_nmap,
         Err(e) => {

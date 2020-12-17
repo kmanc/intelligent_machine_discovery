@@ -305,7 +305,7 @@ impl TargetMachine {
     }
 
 
-    pub fn nmap_scan_all_ports(&self, username: &str) -> Result<(), Box<dyn Error>> {
+    pub fn nmap_scan_all_tcp(&self, username: &str) -> Result<(), Box<dyn Error>> {
         let filename = format!("{}/nmap_all_tcp", self.ip);
         create_output_file(username, &filename)?;
 
@@ -325,23 +325,24 @@ impl TargetMachine {
     }
 
 
-    pub fn nmap_scan_basic(&self, username: &str) -> Result<Option<HashMap<String, Vec<String>>>, Box<dyn Error>> {
+    pub fn nmap_scan_common(&self, username: &str) -> Result<Option<HashMap<String, Vec<String>>>, Box<dyn Error>> {
         // Format filename for use in the nmap function and parser
-        let filename = format!("{}/nmap_basic", self.ip);
-        // Create the basic nmap scan file, which will be used to determine what else to run
+        let filename = format!("{}/nmap_common", self.ip);
+        // Create the common port nmap scan file, which will be used to determine what else to run
         create_output_file(username, &filename)?;
 
         let mut service_hashmap: HashMap<String, Vec<String>> = HashMap::new();
-        let services = vec!["ftp", "ssh", "http", "ssl/http"];
+        // We put spaces in front of each service to make sure we don't double count http and ssl/http later
+        let services = vec![" ftp", " ssh", " http", " ssl/http"];
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()
                                       .write(true)
                                       .open(&filename)?;
 
-        // Run an nmap command with -sV flags, and use the file handle for stdout
+        // Run an nmap command with -A flag, and use the file handle for stdout
         let nmap = Command::new("nmap")
-                           .arg("-sV")
+                           .arg("-A")
                            .arg(self.ip.to_string())
                            .output()?;
 
@@ -356,12 +357,14 @@ impl TargetMachine {
 
         println!("Reading results from \"nmap -sV {}\" to determine next steps", self.ip);
 
-        for service in services.iter() {
+        for service in services {
             for line in nmap.iter() {
-                let line: Vec<&str> = line.split(" ").collect();
+                if line.starts_with("|") {
+                    continue;
+                }
                 if line.contains(&"open") && line.contains(service) {
-                    let port = get_port_from_line(line);
-                    service_hashmap.entry(service.to_string()).or_default().push(port);
+                    let port = get_port_from_line(line.split(" ").collect());
+                    service_hashmap.entry(service.trim().to_string()).or_default().push(port);
                 }
             }
         }

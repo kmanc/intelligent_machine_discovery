@@ -140,6 +140,61 @@ impl TargetMachine {
     }
 
 
+    pub fn bulk_gobuster(&self, username: &str, protocol: &str, target: &str, ports: &Vec<String>) -> Result<Vec<String>, Box<dyn Error>> {
+        let mut web_dirs: Vec<String> = vec![];
+        for port in ports.iter() {
+            match &self.gobuster_scan(username, protocol, target, port) {
+                Ok(gobuster) => {
+                    for dir in gobuster.iter() {
+                        let dir: Vec<&str> = dir.split(" ").collect();
+                        let finding = format!("{}://{}:{}{}", protocol, target, port, dir[0]);
+                        web_dirs.push(finding)
+                    }
+                },
+                Err(e) => eprintln!("{}", e)
+            }
+        }
+
+        Ok(web_dirs)
+    }
+
+
+    pub fn bulk_nikto(&self, username: &str, protocol: &str, target: &str, ports: &Vec<String>) -> Result<(), Box<dyn Error>> {
+        for port in ports.iter() {
+            &self.nikto_scan(username, protocol, target, port)?;
+        }
+
+        Ok(())
+    }
+
+
+    pub fn bulk_wfuzz(&self, username: &str, protocol: &str, targets: Vec<String>) -> Result<(), Box<dyn Error>> {
+        let filename = format!("{}/wfuzz_{}", &self.ip, protocol);
+        create_output_file(username, &filename)?;
+
+        // Obtain a file handle with write permissions
+        let file_handle = OpenOptions::new()
+                                      .write(true)
+                                      .open(&filename)?;
+
+        let mut web_files: Vec<String> = vec![];
+        for target in targets.iter() {
+            match &self.wfuzz_scan(target) {
+                Ok(wfuzz) => {
+                    for file in wfuzz.iter() {
+                        web_files.push(file.to_string());
+                    }
+                },
+                Err(e) => eprintln!("{}", e)
+            }
+        }
+
+        writeln!(&file_handle, "{}", web_files.join("\n"))?;
+
+        Ok(())
+    }
+
+
     pub fn check_connection(&self) -> Result<(), Box<dyn Error>> {
         // Ping the target 4 times
         let ping = Command::new("ping")
@@ -224,9 +279,10 @@ impl TargetMachine {
     }
 
 
-    pub fn nikto_scan(&self, username: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
+    pub fn nikto_scan(&self, username: &str, protocol: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
         let filename = format!("{}/nikto_{}_port_{}", &self.ip, target, port);
         create_output_file(username, &filename)?;
+        let target = format!("{}://{}", protocol, target);
 
         println!("Starting a nikto scan on {}:{}", target, port);
 
@@ -238,7 +294,7 @@ impl TargetMachine {
         // Run the nikto command with a bunch of flags, and use the file handle for stdout
         Command::new("nikto")
                 .arg("-host")
-                .arg(target)
+                .arg(&target)
                 .arg("-port")
                 .arg(port)
                 .stdout(file_handle)
@@ -344,9 +400,33 @@ impl TargetMachine {
     }
 
 
-    pub fn wfuzz_scan(&self, protocol: &str, target: &str, port: &str, dir: &str) -> Result<Vec<String>, Box<dyn Error>>  {
+    pub fn web_bundle(&self, username: &str, protocol: &str, ports: &Vec<String>) -> Result<(), Box<dyn Error>> {
+        let target = match self.hostname() {
+                Some(hostname) => hostname.to_string(),
+                None => self.ip().to_string()
+        };
+        let target = target.as_str();
+
+        if let Err(e) = self.bulk_nikto(&username, protocol, target, ports) {
+            eprintln!("{}", e);
+        }
+
+        match self.bulk_gobuster(&username, protocol, target, ports) {
+            Ok(web_dirs) => {
+                if let Err(e) = self.bulk_wfuzz(&username, protocol, web_dirs) {
+                    return Err(e)
+                }
+            },
+            Err(e) => return Err(e)
+        };
+
+        Ok(())
+    }
+
+
+    pub fn wfuzz_scan(&self, full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
         // Format a string to pass to wfuzz
-        let wfuzz_arg = format!("{}://{}:{}{}/FUZZ", protocol, target, port, dir);
+        let wfuzz_arg = format!("{}/FUZZ", full_target);
         // Wfuzz + a million arguments
         let wfuzz = Command::new("wfuzz")
                             .arg("-w")
@@ -389,7 +469,7 @@ impl TargetMachine {
             }
         }
 
-        println!("\tCompleted wfuzz scan for {}://{}:{}{}/", protocol, target, port, dir);
+        println!("\tCompleted wfuzz scan for {}", full_target);
         // Return filtered parts
         Ok(wfuzz_out)
     }

@@ -40,8 +40,12 @@ fn main() {
     let first_target = &targets[0];
     // Just take the first IP address for now
     let ip_address = &targets[0].ip().to_string();
-    // Just take the first hostname if it was entered
-    let hostname = &String::from(targets[0].hostname().as_deref().unwrap_or(&String::from("None")));
+    // Take the first hostname as well
+    if first_target.hostname().is_some() {
+        if let Err(e) = first_target.add_to_hosts() {
+            eprintln!("{}", e);
+        }
+    }
     // Just take the username for now
     let username = config.username();
 
@@ -75,13 +79,6 @@ fn main() {
 
      */
 
-    //
-    if first_target.hostname().is_some() {
-        if let Err(e) = first_target.add_to_hosts() {
-            eprintln!("{}", e);
-        }
-    }
-
     // Run a basic nmap scan with service discovery
     println!("Running \"nmap -sV {}\" for basic target information", ip_address);
     let parsed_nmap = first_target.nmap_scan_basic(&username);
@@ -101,59 +98,24 @@ fn main() {
     let first_target = TargetMachine::new(*first_target.ip(), hostname, parsed_nmap);
 
 
-    println!("POST NMAP SCAN {:?}", &first_target);
-
     println!("\tCompleted planning next steps based on nmap scan");
 
     match first_target.services() {
         Some(services) => {
+
             if services.contains_key("http") {
-                println!("we have some http ports! {:?}", services.get("http").unwrap())
+                if let Err(e) = first_target.web_bundle(&username, "http", services.get("http").unwrap()){
+                    eprintln!("{}", e);
+                }
             }
             if services.contains_key("ssl/http") {
-                println!("we have some https ports! {:?}", services.get("ssl/http").unwrap())
+                if let Err(e) = first_target.web_bundle(&username, "https", services.get("http").unwrap()){
+                    eprintln!("{}", e);
+                }
             }
         },
         None => ()
     }
-
-    println!("TODO: uncomment the lines about web when ready to test on Kali");
-    // Make a vector of IP and hostname for easier iteration
-    /*
-    for port in parsed_nmap.http.iter() {
-        let web_targets: Vec<String> = vec![ip_address.clone(), hostname.clone()];
-        for web_host in web_targets.iter() {
-            println!("Running nikto scan on {}:{}", &web_host, &port);
-            if let Err(e) = first_target.nikto_scan(&username, &web_host, &port) {
-                eprintln!("Nikto issue {}", e);
-            }
-
-            println!("Running gobuster scans on {}:{}", &web_host, &port);
-
-            let gobuster = first_target.gobuster_scan(&username, &web_host, &port);
-            let gobuster = match gobuster {
-                Ok(gobuster) => gobuster,
-                Err(e) => {
-                    eprintln!("Gobuster Issue {}", e);
-                    vec![]
-                }
-            };
-
-            for dir in gobuster.iter() {
-                println!("Running gobuster scans on {}:{}{}", &web_host, &port, &dir);
-                let wfuzz = first_target.wfuzz_scan(&web_host, &port, &dir);
-                let wfuzz = match wfuzz {
-                    Ok(wfuzz) => wfuzz,
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        vec![]
-                    }
-                };
-                println!("WFUZZ: {:?}", wfuzz);
-            }
-        }
-    }
-    */
 
     // Fix stdout because it somehow gets messed up
     io::stdout().flush().unwrap();

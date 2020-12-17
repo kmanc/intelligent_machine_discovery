@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -6,20 +7,15 @@ use std::process::Command;
 
 #[derive(Debug)]
 pub struct Config {
-    pub targets: Vec<TargetMachine>,
-    pub username: String,
+    targets: Vec<TargetMachine>,
+    username: String,
 }
 
 #[derive(Debug)]
 pub struct TargetMachine {
-    pub ip: IpAddr,
-    pub hostname: Option<String>,
-}
-
-pub struct ServicePorts {
-    pub ftp: Vec<String>,
-    pub http: Vec<String>,
-    pub https: Vec<String>,
+    ip: IpAddr,
+    hostname: Option<String>,
+    services: Option<HashMap<String, Vec<String>>>
 }
 
 impl Config {
@@ -46,10 +42,7 @@ impl Config {
                     // Otherwise if last is not None
                     else if last != None {
                         // Add a target machine to the list with last as its IP address and None as its hostname
-                        targets.push(TargetMachine{
-                            ip: last.unwrap(),
-                            hostname: None,
-                        });
+                        targets.push(TargetMachine::new(last.unwrap(), None, None));
                         // Then set last as the IP address
                         last = Some(ip);
                     }
@@ -64,10 +57,7 @@ impl Config {
                     // Otherwise if last is not None
                     else if last != None {
                         // Add a target machine to the list with last as its IP address and the argument as its hostname
-                        targets.push(TargetMachine{
-                            ip: last.unwrap(),
-                            hostname: Some(String::from(arg)),
-                        });
+                        targets.push(TargetMachine::new(last.unwrap(), Some(arg.to_owned()), None));
                         // Set last to None
                         last = None;
                     }
@@ -80,6 +70,7 @@ impl Config {
             targets.push(TargetMachine{
                     ip: last.unwrap(),
                     hostname: None,
+                    services: None
             });
         }
 
@@ -93,7 +84,7 @@ impl Config {
         let username = match username {
             Ok(username) => username,
             Err(e) => {
-                println!("Using \"root\" for file permissions because of error: {}", e);
+                eprintln!("Using \"root\" for file permissions because of error: {}", e);
                 String::from("root")
             }
         };
@@ -102,16 +93,14 @@ impl Config {
         Ok(Config{ targets, username })
     }
 
-    pub fn create_dir(&self, dir_name: &str) -> Result<(), Box<dyn Error>> {
-    // Create a file as the provided user with the desired name
-    Command::new("sudo")
-            .arg("-u")
-            .arg(&self.username)
-            .arg("mkdir")
-            .arg(dir_name)
-            .output()?;
 
-    Ok(())
+    pub fn targets(&self) -> &Vec<TargetMachine> {
+        &self.targets
+    }
+
+
+    pub fn username(&self) -> &String {
+        &self.username
     }
 }
 
@@ -170,13 +159,17 @@ impl TargetMachine {
     }
 
 
-    pub fn gobuster_wfuzz_scans(&self, username: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
-        let filename = format!("{}/dirs_{}:{}", &self.ip, &target, &port);
-        let target = String::from(target);
-        let port = String::from(port);
-        create_output_file(username, &filename)?;
+    pub fn hostname(&self) -> Option<&String> {
+        match &self.hostname {
+            Some(hostname) => Some(hostname),
+            None => None
+        }
+    }
 
-        println!("Starting gobuster directory scan on {}:{}", &target, &port);
+
+    pub fn gobuster_scan(&self, username: &str, protocol: &str, target: &str, port: &str) -> Result<Vec<String>, Box<dyn Error>> {
+        let filename = format!("{}/dirs_{}_port_{}", &self.ip, target, port);
+        create_output_file(username, &filename)?;
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()
@@ -184,7 +177,8 @@ impl TargetMachine {
                                       .open(&filename)?;
 
         // Run gobuster with a slew of flags
-        let gobuster_arg = format!("http://{}:{}", &target, &port);
+        let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
+        println!("Starting gobuster directory scan on {}", &gobuster_arg);
         let gobuster = Command::new("gobuster")
                                .arg("dir")
                                .arg("-q")
@@ -195,14 +189,13 @@ impl TargetMachine {
                                .arg("/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt")
                                .arg("-u")
                                .arg(&gobuster_arg)
-                               .stdout(file_handle)
                                .output()?;
 
         // Grab the output and convert it to a string
-        let gobuster = String::from_utf8(gobuster.stdout).unwrap();
-        // Remove whitespace
-        let gobuster = gobuster.trim();
-        // Convert it to a vector by splitting on newlines and allow it to be mutable
+        let gobuster = String::from_utf8(gobuster.stdout)?;
+        // Write the output to a file for the user in a way that allows for later use
+        writeln!(&file_handle, "{}", &gobuster)?;
+        // Convert it to a vector by splitting on newlines and allow it to be mutable - also trim each line
         let mut gobuster: Vec<String> = gobuster.split("\n")
                                               .map(|s| s.trim().to_string())
                                               .collect();
@@ -211,56 +204,47 @@ impl TargetMachine {
             gobuster.push(String::from(""));
         }
 
-        println!("\tCompleted gobuster scan for {}:{}", &target, &port);
+        println!("\tCompleted gobuster scan for {}", &gobuster_arg);
 
-        // We're going to spin up a bunch of threads that need to share a common output
-        let mut wfuzz_result = vec![];
+        Ok(gobuster)
+    }
 
-        for dir in gobuster.iter() {
-            println!("Starting wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
-            wfuzz_result.extend(run_wfuzz(&dir, &target, &port));
+
+    pub fn ip(&self) -> &IpAddr {
+        &self.ip
+    }
+
+
+    pub fn new(ip: IpAddr, hostname: Option<String>, services: Option<HashMap<String, Vec<String>>>) -> TargetMachine {
+        TargetMachine{
+            ip,
+            hostname,
+            services
         }
-
-
-        let filename = format!("{}/files_{}:{}", &self.ip, &target, &port);
-        create_output_file(username, &filename)?;
-        let file_handle = OpenOptions::new()
-                                      .create(true)
-                                      .append(true)
-                                      .open(&filename)?;
-
-        // Write the results line by line to the file
-        for entry in wfuzz_result.iter() {
-            writeln!(&file_handle, "{}", entry)?;
-        }
-
-        Ok(())
     }
 
 
     pub fn nikto_scan(&self, username: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
-        let filename = format!("{}/nikto_{}:{}", &self.ip, &target, &port);
-        let target = String::from(target);
-        let port = String::from(port);
+        let filename = format!("{}/nikto_{}_port_{}", &self.ip, target, port);
         create_output_file(username, &filename)?;
 
-        println!("Starting a nikto scan on {}:{}", &target, &port);
+        println!("Starting a nikto scan on {}:{}", target, port);
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()
                                       .write(true)
-                                      .open(&filename)?;
+                                      .open(filename)?;
 
         // Run the nikto command with a bunch of flags, and use the file handle for stdout
         Command::new("nikto")
                 .arg("-host")
-                .arg(&target)
+                .arg(target)
                 .arg("-port")
-                .arg(&port)
+                .arg(port)
                 .stdout(file_handle)
                 .output()?;
 
-        println!("\tCompleted nikto scan on {}:{}", &target, &port);
+        println!("\tCompleted nikto scan on {}:{}", target, port);
         Ok(())
     }
 
@@ -285,18 +269,14 @@ impl TargetMachine {
     }
 
 
-    pub fn nmap_scan_basic(&self, username: &str) -> Result<ServicePorts, Box<dyn Error>> {
+    pub fn nmap_scan_basic(&self, username: &str) -> Result<Option<HashMap<String, Vec<String>>>, Box<dyn Error>> {
         // Format filename for use in the nmap function and parser
         let filename = format!("{}/nmap_basic", self.ip);
         // Create the basic nmap scan file, which will be used to determine what else to run
         create_output_file(username, &filename)?;
 
-        // Set an empty vector of ftp ports
-        let mut ftp: Vec<String> = vec![];
-        // Set an empty vector of http ports
-        let mut http: Vec<String> = vec![];
-        // Set an empty vector of https ports
-        let mut https: Vec<String> = vec![];
+        let mut service_hashmap: HashMap<String, Vec<String>> = HashMap::new();
+        let services = vec!["ftp", "ssh", "http", "ssl/http"];
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()
@@ -307,40 +287,41 @@ impl TargetMachine {
         let nmap = Command::new("nmap")
                            .arg("-sV")
                            .arg(self.ip.to_string())
-                           .stdout(file_handle)
                            .output()?;
 
         // Grab the output and convert it to a string
         let nmap = String::from_utf8(nmap.stdout).unwrap();
-        // Remove whitespace
-        let nmap = nmap.trim();
-        // Convert it to a vector by splitting on newlines
+        // Write the output to a file for the user in a way that allows for later use
+        writeln!(&file_handle, "{}", &nmap)?;
+        // Convert it to a vector by splitting on newlines - also trim each line
         let nmap: Vec<String> = nmap.split("\n")
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
         println!("Reading results from \"nmap -sV {}\" to determine next steps", self.ip);
 
-        for line in nmap.iter() {
-            let line: Vec<&str> = line.split(" ").collect();
-            if line.contains(&"open") && line.contains(&"ftp") {
-                // If the line indicates ftp is open, get the port and add it to the ftp vector
-                let port = get_port_from_line(line);
-                ftp.push(port);
-            } else if line.contains(&"open") && line.contains(&"http") {
-                // If the line indicates http is open, get the port and add it to the http vector
-                let port = get_port_from_line(line);
-                http.push(port);
-            } else if line.contains(&"open") && line.contains(&"ssl/http") {
-                // If the line indicates https is open, get the port and add it to the https vector
-                let port = get_port_from_line(line);
-                https.push(port);
+        for service in services.iter() {
+            for line in nmap.iter() {
+                let line: Vec<&str> = line.split(" ").collect();
+                if line.contains(&"open") && line.contains(service) {
+                    let port = get_port_from_line(line);
+                    service_hashmap.entry(service.to_string()).or_default().push(port);
+                }
             }
         }
 
-        // Return the vectors for all of the services we looked for
-        Ok(ServicePorts { ftp, http, https })
+        // Return the map of services and ports we found
+        Ok(Some(service_hashmap))
     }
+
+
+    pub fn services(&self) -> Option<&HashMap<String, Vec<String>>> {
+        match &self.services {
+            Some(services) => Some(services),
+            None => None
+        }
+    }
+
 
     pub fn showmount_scan(&self, username: &str) -> Result<(), Box<dyn Error>> {
         let filename = format!("{}/nfs_shares", self.ip);
@@ -361,6 +342,57 @@ impl TargetMachine {
         println!("\tCompleted scan for NFS shares");
         Ok(())
     }
+
+
+    pub fn wfuzz_scan(&self, protocol: &str, target: &str, port: &str, dir: &str) -> Result<Vec<String>, Box<dyn Error>>  {
+        // Format a string to pass to wfuzz
+        let wfuzz_arg = format!("{}://{}:{}{}/FUZZ", protocol, target, port, dir);
+        // Wfuzz + a million arguments
+        let wfuzz = Command::new("wfuzz")
+                            .arg("-w")
+                            .arg("/usr/share/wordlists/seclists/raft-medium-files.txt")
+                            .arg("-t")
+                            .arg("20")
+                            .arg("--hc")
+                            .arg("301,302,404")
+                            .arg("-o")
+                            .arg("raw")
+                            .arg(wfuzz_arg)
+                            .output()?;
+
+        // Grab the output and convert it to a string
+        let wfuzz = String::from_utf8(wfuzz.stdout).unwrap();
+        // Remove whitespace
+        let wfuzz = wfuzz.trim();
+        // Split it by newlines and allow it to be mutable
+        let wfuzz: Vec<String> = wfuzz.split("\n")
+                                      .map(|s| s.trim().to_string())
+                                      .collect();
+
+        // Some of this is garbage banner stuff, so set offsets to filter that out
+        let header_elements_end = 5;
+        let footer_elements_begin = wfuzz.len() - 4;
+
+        let mut wfuzz_out = vec![];
+        for (index, found) in wfuzz.iter().enumerate() {
+            // The first banner is useful
+            if index == 0 {
+                wfuzz_out.push(String::from(found))
+            }
+            // As is the third banner
+            else if index == 2 {
+                wfuzz_out.push(String::from(found))
+            }
+            // The other useful banners fall between these two offsets
+            else if header_elements_end <= index && index < footer_elements_begin {
+                wfuzz_out.push(String::from(found))
+            }
+        }
+
+        println!("\tCompleted wfuzz scan for {}://{}:{}{}/", protocol, target, port, dir);
+        // Return filtered parts
+        Ok(wfuzz_out)
+    }
 }
 
 
@@ -376,6 +408,19 @@ pub fn capture_username() -> Result<String, Box<dyn Error>> {
     // Return the first element (username) as string
     Ok(String::from(who[0]))
 }
+
+
+pub fn create_dir(username: &str, dir_name: &str) -> Result<(), Box<dyn Error>> {
+    // Create a file as the provided user with the desired name
+    Command::new("sudo")
+            .arg("-u")
+            .arg(username)
+            .arg("mkdir")
+            .arg(dir_name)
+            .output()?;
+
+    Ok(())
+    }
 
 
 fn create_output_file(username: &str, filename: &String) -> Result<(), Box<dyn Error>> {
@@ -417,54 +462,4 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 
     // Return Ok result if we are id 0
     Ok(())
-}
-
-
-fn run_wfuzz(dir: &str, target: &str, port: &str) -> Vec<String> {
-    // Format a string to pass to wfuzz
-    let wfuzz_arg = format!("http://{}:{}{}/FUZZ", target, port, dir);
-    // Wfuzz + a million arguments
-    let wfuzz = Command::new("wfuzz")
-                        .arg("-w")
-                        .arg("/usr/share/wordlists/seclists/raft-medium-files.txt")
-                        .arg("-t")
-                        .arg("20")
-                        .arg("--hc")
-                        .arg("301,302,404")
-                        .arg("-o")
-                        .arg("raw")
-                        .arg(wfuzz_arg)
-                        .output();
-
-    match wfuzz {
-        Ok(wfuzz) => {
-            // Grab the output and convert it to a string
-            let wfuzz = String::from_utf8(wfuzz.stdout).unwrap();
-            // Remove whitespace
-            let wfuzz = wfuzz.trim();
-            // Split it by newlines and allow it to be mutable
-            let wfuzz: Vec<String> = wfuzz.split("\n")
-                                          .map(|s| s.trim().to_string())
-                                          .collect();
-
-            // Some of this is garbage banner stuff, so filter that out
-            let header_elements_end = 5;
-            let footer_elements_begin = wfuzz.len() - 4;
-            // The first and third banner entries are useful, grab those
-            let mut wfuzz_out = vec![wfuzz[0].clone(), wfuzz[2].clone()];
-            // Only include the other parts that are not part of the banner
-            for found in wfuzz[header_elements_end..footer_elements_begin].iter() {
-                wfuzz_out.push(String::from(found));
-            }
-
-            println!("\tCompleted wfuzz scan for http://{}:{}{}/", &target, &port, &dir);
-            // Return filtered parts
-            return wfuzz_out
-        },
-        Err(err) => {
-            println!("\tFailed to run wfuzz scan for http://{}:{}{}/: {}", &target, &port, &dir, err);
-
-            return vec![]
-        }
-    }
 }

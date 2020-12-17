@@ -371,7 +371,7 @@ impl TargetMachine {
                     continue;
                 }
                 if line.contains(&"open") && line.contains(service) {
-                    let port = get_port_from_line(line.split(" ").collect());
+                    let port = get_port_from_line(line);
                     service_hashmap.entry(service.trim().to_string()).or_default().push(port);
                 }
             }
@@ -438,6 +438,7 @@ impl TargetMachine {
     pub fn wfuzz_scan(&self, full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
         // Format a string to pass to wfuzz
         let wfuzz_arg = format!("{}/FUZZ", full_target);
+        println!("Starting wfuzz scan for {}", full_target);
         // Wfuzz + a million arguments
         let wfuzz = Command::new("wfuzz")
                             .arg("-w")
@@ -527,7 +528,8 @@ fn create_output_file(username: &str, filename: &String) -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn get_port_from_line(line: Vec<&str>) -> String {
+fn get_port_from_line(line: &String) -> String {
+    let line: Vec<&str> = line.split(" ").collect();
     // Convert the first element of the vector to a string
     let port = String::from(line[0]);
     // Split the first element at slashes

@@ -100,6 +100,8 @@ fn main() {
 
     println!("\tCompleted planning next steps based on nmap scan");
 
+    println!("BTW, the target now looks like {:?}", &first_target);
+
     match first_target.services() {
         Some(services) => {
 
@@ -109,7 +111,7 @@ fn main() {
                 }
             }
             if services.contains_key("ssl/http") {
-                if let Err(e) = first_target.web_bundle(&username, "https", services.get("http").unwrap()){
+                if let Err(e) = first_target.web_bundle(&username, "https", services.get("ssl/http").unwrap()){
                     eprintln!("{}", e);
                 }
             }

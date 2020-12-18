@@ -5,13 +5,11 @@ use std::io::Write;
 use std::net::IpAddr;
 use std::process::Command;
 
-#[derive(Debug)]
 pub struct Config {
     targets: Vec<TargetMachine>,
     username: String,
 }
 
-#[derive(Debug)]
 pub struct TargetMachine {
     ip: IpAddr,
     hostname: Option<String>,
@@ -106,12 +104,13 @@ impl Config {
 
 
 impl TargetMachine {
-    pub fn add_to_hosts(&self) -> Result<(), Box<dyn Error>>{
+    pub fn add_to_hosts(&self) -> Result<(), Box<dyn Error>> {
+        println!("Checking /etc/hosts file for {} {}", self.ip, self.hostname.as_deref().unwrap());
         // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
         let filename = "/etc/hosts";
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
         let grep_pattern = format!("({})\\s({})$", self.ip, self.hostname.as_deref().unwrap());
-        // Run the grep command
+        // Grep /etc/hosts for the IP/hostname pair
         let grep = Command::new("grep")
                        .arg("-E")
                        .arg(grep_pattern)
@@ -128,12 +127,12 @@ impl TargetMachine {
                                           .append(true)
                                           .open(&filename)?;
 
-            // Let the user know you are writing the IP/hostname pair to /etc/hosts
-            println!("Adding \"{} {}\" to /etc/hosts and preparing additional discovery", self.ip, self.hostname.as_deref().unwrap());
             // Write the IP/hostname pair to /etc/hosts
             writeln!(&file_handle, "{} {}", self.ip, self.hostname.as_deref().unwrap())?;
 
             println!("\t/etc/hosts updated");
+        } else {
+            println!("\t/etc/hosts already contains {} {}", self.ip, self.hostname.as_deref().unwrap());
         }
 
         Ok(())
@@ -196,6 +195,7 @@ impl TargetMachine {
 
 
     pub fn check_connection(&self) -> Result<(), Box<dyn Error>> {
+        println!("Verifying connectivity to {}", self.ip.to_string());
         // Ping the target 4 times
         let ping = Command::new("ping")
                            .arg("-c")
@@ -223,6 +223,8 @@ impl TargetMachine {
 
 
     pub fn gobuster_scan(&self, username: &str, protocol: &str, target: &str, port: &str) -> Result<Vec<String>, Box<dyn Error>> {
+        let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
+        println!("Starting gobuster directory scan on {}", &gobuster_arg);
         let filename = format!("{}/dirs_{}_port_{}", &self.ip, target, port);
         create_output_file(username, &filename)?;
 
@@ -232,8 +234,6 @@ impl TargetMachine {
                                       .open(&filename)?;
 
         // Run gobuster with a slew of flags
-        let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
-        println!("Starting gobuster directory scan on {}", &gobuster_arg);
         let gobuster = Command::new("gobuster")
                                .arg("dir")
                                .arg("-q")
@@ -261,6 +261,7 @@ impl TargetMachine {
 
         println!("\tCompleted gobuster scan for {}", &gobuster_arg);
 
+        // Return gobuster results
         Ok(gobuster)
     }
 
@@ -280,11 +281,10 @@ impl TargetMachine {
 
 
     pub fn nikto_scan(&self, username: &str, protocol: &str, target: &str, port: &str) -> Result<(), Box<dyn Error>> {
+        let nikto_arg = format!("{}://{}:{}", protocol, target, port);
+        println!("Starting a nikto scan on {}", nikto_arg);
         let filename = format!("{}/nikto_{}_port_{}", &self.ip, target, port);
         create_output_file(username, &filename)?;
-        let target = format!("{}://{}", protocol, target);
-
-        println!("Starting a nikto scan on {}:{}", target, port);
 
         // Obtain a file handle with write permissions
         let file_handle = OpenOptions::new()
@@ -294,18 +294,17 @@ impl TargetMachine {
         // Run the nikto command with a bunch of flags, and use the file handle for stdout
         Command::new("nikto")
                 .arg("-host")
-                .arg(&target)
-                .arg("-port")
-                .arg(port)
+                .arg(&nikto_arg)
                 .stdout(file_handle)
                 .output()?;
 
-        println!("\tCompleted nikto scan on {}:{}", target, port);
+        println!("\tCompleted nikto scan on {}", nikto_arg);
         Ok(())
     }
 
 
     pub fn nmap_scan_all_tcp(&self, username: &str) -> Result<(), Box<dyn Error>> {
+        println!("Running \"nmap -p- {}\" for information on all TCP ports", self.ip);
         let filename = format!("{}/nmap_all_tcp", self.ip);
         create_output_file(username, &filename)?;
 
@@ -326,6 +325,7 @@ impl TargetMachine {
 
 
     pub fn nmap_scan_common(&self, username: &str) -> Result<Option<HashMap<String, Vec<String>>>, Box<dyn Error>> {
+        println!("Running \"nmap -sV {}\" (plus a few NSE scripts) for information on common ports", self.ip);
         // Format filename for use in the nmap function and parser
         let filename = format!("{}/nmap_common", self.ip);
         // Create the common port nmap scan file, which will be used to determine what else to run
@@ -361,6 +361,7 @@ impl TargetMachine {
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
+        println!("\tCompleted nmap scan on common ports");
         println!("Reading results from \"nmap -sV {}\" to determine next steps", self.ip);
 
         // We put spaces in front of each service to make sure we don't double count http and ssl/http later
@@ -378,6 +379,7 @@ impl TargetMachine {
                 }
             }
         }
+        println!("\tCompleted planning next steps based on nmap scan");
 
         // Return the map of services and ports we found
         Ok(Some(service_hashmap))
@@ -393,6 +395,7 @@ impl TargetMachine {
 
 
     pub fn showmount_scan(&self, username: &str) -> Result<(), Box<dyn Error>> {
+        println!("Running \"showmount -e {}\" to list all NFS shares", self.ip);
         let filename = format!("{}/nfs_shares", self.ip);
         create_output_file(username, &filename)?;
 
@@ -438,9 +441,9 @@ impl TargetMachine {
 
 
     pub fn wfuzz_scan(&self, full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
+        println!("Starting wfuzz scan for {}", full_target);
         // Format a string to pass to wfuzz
         let wfuzz_arg = format!("{}/FUZZ", full_target);
-        println!("Starting wfuzz scan for {}", full_target);
         // Wfuzz + a million arguments
         let wfuzz = Command::new("wfuzz")
                             .arg("-w")
@@ -482,9 +485,9 @@ impl TargetMachine {
                 wfuzz_out.push(String::from(found))
             }
         }
-
         println!("\tCompleted wfuzz scan for {}", full_target);
-        // Return filtered parts
+
+        // Return wfuzz results
         Ok(wfuzz_out)
     }
 }
@@ -505,6 +508,7 @@ pub fn capture_username() -> Result<String, Box<dyn Error>> {
 
 
 pub fn create_dir(username: &str, dir_name: &str) -> Result<(), Box<dyn Error>> {
+    println!("Creating directory \"{}\" to store resulting files in", dir_name);
     // Create a file as the provided user with the desired name
     Command::new("sudo")
             .arg("-u")
@@ -514,7 +518,7 @@ pub fn create_dir(username: &str, dir_name: &str) -> Result<(), Box<dyn Error>> 
             .output()?;
 
     Ok(())
-    }
+}
 
 
 fn create_output_file(username: &str, filename: &String) -> Result<(), Box<dyn Error>> {
@@ -549,11 +553,69 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 
     // Capture output as a vector of ascii bytes
     let sudo = sudo.stdout;
-    // Return an error if result was not [48, 10] (ie ascii "0\n")
+    // Return an error if result was not [48, 10] (ie ascii "0\n") because we don't have sudo permissions
     if !(sudo[0] == 48 && sudo[1] == 10) {
         return Err("\"imd\" needs elevated privileges - please run with \"sudo\"".into())
     }
 
-    // Return Ok result if we are id 0
+    Ok(())
+}
+
+
+pub fn target_discovery(target_machine: &TargetMachine, username: &str) -> Result<(), Box<dyn Error>> {
+    // Convert the IP address to a string once for later use
+    let ip_address = target_machine.ip().to_string();
+    // Convert the hostname to an Option<String> once for later use
+    let hostname = match &target_machine.hostname() {
+        Some(hostname) => Some(hostname.to_string()),
+        None => None
+    };
+
+    // Check /etc/hosts for the IP/hostname combo if there is a hostname
+    if hostname.is_some() {
+        target_machine.add_to_hosts()?;
+    }
+
+    // Ping the machine to make sure it is alive and reachable
+    target_machine.check_connection()?;
+
+    // Create directory for storing things in
+    create_dir(username,&ip_address)?;
+
+    // Run an nmap scan on all tcp ports
+    target_machine.nmap_scan_all_tcp(&username)?;
+
+    // Run a showmount scan
+    target_machine.showmount_scan(&username)?;
+
+    // Run a common-port nmap scan with service discovery
+    let parsed_nmap = target_machine.nmap_scan_common(&username);
+    let parsed_nmap = match parsed_nmap {
+        Ok(parsed_nmap) => parsed_nmap,
+        Err(e) => {
+            eprintln!("{}", e);
+            None
+        }
+    };
+
+    // Remake the TargetMachine, this time with services known
+    let target_machine = TargetMachine::new(*target_machine.ip(), hostname, parsed_nmap);
+
+    match target_machine.services() {
+        Some(services) => {
+            if services.contains_key("http") {
+                if let Err(e) = target_machine.web_bundle(&username, "http", services.get("http").unwrap()){
+                    eprintln!("{}", e);
+                }
+            }
+            if services.contains_key("ssl/http") {
+                if let Err(e) = target_machine.web_bundle(&username, "https", services.get("ssl/http").unwrap()){
+                    eprintln!("{}", e);
+                }
+            }
+        },
+        None => ()
+    }
+
     Ok(())
 }

@@ -3,12 +3,10 @@
  GitHub: https://github.com/kmanc/
 */
 
-use std::collections::HashMap;
+use imd::Config;
 use std::env;
 use std::io::{self, Write};
 use std::process;
-
-use imd::Config;
 
 
 fn main() {

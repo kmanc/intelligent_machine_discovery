@@ -557,3 +557,68 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
     // Return Ok result if we are id 0
     Ok(())
 }
+
+
+pub fn target_discovery(target_machine: &TargetMachine, username: &str) -> Result<(), Box<dyn Error>> {
+    // Take the IP address for now
+    let ip_address = target_machine.ip().to_string();
+    // Take the hostname for now
+    let hostname = match target_machine.hostname() {
+        Some(hostname) => Some(String::from(hostname)),
+        None => None
+    };
+
+    if target_machine.hostname().is_some() {
+        target_machine.add_to_hosts()?;
+    }
+
+    // Ping the machine to make sure it is alive
+    println!("Verifying connectivity to {}", ip_address);
+    target_machine.check_connection()?;
+
+    // Create directory for storing things in
+    println!("Creating directory \"{}\" to store resulting files in", ip_address);
+    create_dir(username,&ip_address)?;
+
+    // nmap scan on all tcp ports
+    println!("Running \"nmap -p- {}\" for information on all TCP", ip_address);
+    target_machine.nmap_scan_all_tcp(&username)?;
+
+    // showmount scan
+    println!("Listing all NFS shares");
+    target_machine.showmount_scan(&username)?;
+
+    // Run a common-port nmap scan with service discovery
+    println!("Running \"nmap -sV {}\" (plus a few NSE scripts) for information on common ports", ip_address);
+    let parsed_nmap = target_machine.nmap_scan_common(&username);
+    let parsed_nmap = match parsed_nmap {
+        Ok(parsed_nmap) => parsed_nmap,
+        Err(e) => {
+            eprintln!("{}", e);
+            None
+        }
+    };
+
+    // Remake the TargetMachine, this time with services known
+    let target_machine = TargetMachine::new(*target_machine.ip(), hostname, parsed_nmap);
+
+    println!("\tCompleted planning next steps based on nmap scan");
+
+    match target_machine.services() {
+        Some(services) => {
+            if services.contains_key("http") {
+                if let Err(e) = target_machine.web_bundle(&username, "http", services.get("http").unwrap()){
+                    eprintln!("{}", e);
+                }
+            }
+            if services.contains_key("ssl/http") {
+                if let Err(e) = target_machine.web_bundle(&username, "https", services.get("ssl/http").unwrap()){
+                    eprintln!("{}", e);
+                }
+            }
+        },
+        None => ()
+    }
+
+    Ok(())
+}

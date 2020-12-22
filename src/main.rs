@@ -28,9 +28,9 @@ fn main() {
         }
     };
 
-    let username = config.username();
 
     for target_machine in config.targets().iter() {
+        let username = config.username().to_owned();
         if let Err(e) = imd::target_discovery(target_machine, username) {
             eprintln!("{}", e);
         }

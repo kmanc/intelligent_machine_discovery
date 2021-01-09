@@ -226,7 +226,7 @@ impl TargetMachine {
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
-        println!("\tCompleted nmap scan on common ports");
+        println!("\tCompleted nmap scan on {}'s common ports", &self.ip().to_string());
         println!("Reading results from \"nmap -sV {}\" to determine next steps", &self.ip().to_string());
 
         // We put spaces in front of each service to make sure we don't double count http and ssl/http later
@@ -547,6 +547,8 @@ fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> 
             .arg(&*ip)
             .stdout(file_handle)
             .output()?;
+
+    println!("\tCompleted nmap scan on all of {}'s TCP ports", ip);
 
     Ok(())
 }

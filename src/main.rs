@@ -51,5 +51,6 @@ fn main() {
     }
 
     // Fix stdout because it somehow gets messed up
+    println!("All machine scans complete");
     io::stdout().flush().unwrap();
 }

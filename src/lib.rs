@@ -13,6 +13,7 @@ pub struct Config {
     username: String,
 }
 
+#[derive(Clone)]
 pub struct TargetMachine {
     ip: IpAddr,
     hostname: Option<String>
@@ -159,7 +160,7 @@ impl TargetMachine {
         let ping = String::from_utf8(ping.stdout).unwrap();
 
         // Exit if all 4 packets were lost
-        if ping.contains("100.0% packet loss") {
+        if ping.contains("100% packet loss") || ping.contains("100.0% packet loss") {
             return Err(format!("4 / 4 attempts to ping \"{}\" failed, please check connectivity", self.ip).into())
         }
 
@@ -305,17 +306,6 @@ impl TargetMachineNmapped {
         let arc_target = Arc::clone(&target);
         let arc_ports = Arc::clone(&ports);
 
-        if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, arc_ports) {
-            eprintln!("{}", e);
-        }
-
-        // Clone Arcs again for more threading
-        let arc_ip = Arc::clone(&ip);
-        let arc_username = Arc::clone(&username);
-        let arc_protocol = Arc::clone(&protocol);
-        let arc_target = Arc::clone(&target);
-        let arc_ports = Arc::clone(&ports);
-
         match bulk_gobuster(arc_ip, arc_username, arc_protocol, arc_target, arc_ports) {
             Ok(web_dirs) => {
                 let arc_ip = Arc::clone(&ip);
@@ -327,6 +317,16 @@ impl TargetMachineNmapped {
             },
             Err(e) => return Err(e)
         };
+
+        // Clone Arcs again for more threading
+        let arc_ip = Arc::clone(&ip);
+        let arc_username = Arc::clone(&username);
+        let arc_protocol = Arc::clone(&protocol);
+        let arc_target = Arc::clone(&target);
+        let arc_ports = Arc::clone(&ports);
+        if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, arc_ports) {
+            eprintln!("{}", e);
+        }
 
         Ok(())
     }
@@ -508,7 +508,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
 
 fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: String) -> Result<(), Box<dyn Error>> {
     let nikto_arg = format!("{}://{}:{}", protocol, target, port);
-    println!("Starting a nikto scan on {}", nikto_arg);
+    println!("Starting a 60 second max nikto scan on {}", nikto_arg);
     let filename = format!("{}/nikto_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
 
@@ -517,10 +517,12 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
                                   .write(true)
                                   .open(filename)?;
 
-    // Run the nikto command with a bunch of flags, and use the file handle for stdout
+    // Run the nikto command with a few flags, and use the file handle for stdout
     Command::new("nikto")
             .arg("-host")
             .arg(&nikto_arg)
+            .arg("-maxtime")
+            .arg("60")
             .stdout(file_handle)
             .output()?;
 
@@ -669,7 +671,7 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 }
 
 
-pub fn target_discovery(target_machine: &TargetMachine, username: String) -> Result<(), Box<dyn Error>> {
+pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>) -> Result<(), Box<dyn Error>> {
     // Convert the IP address to a string once for later use
     let ip = target_machine.ip().to_string();
     // Convert the hostname to an Option<String> once for later use
@@ -689,7 +691,6 @@ pub fn target_discovery(target_machine: &TargetMachine, username: String) -> Res
 
     // Create Arcs for IP and username so they can be cloned and sent to the threads
     let ip= Arc::new(ip);
-    let username = Arc::new(username);
 
     // Clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);

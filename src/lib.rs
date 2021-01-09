@@ -318,7 +318,10 @@ impl TargetMachineNmapped {
 
         match bulk_gobuster(arc_ip, arc_username, arc_protocol, arc_target, arc_ports) {
             Ok(web_dirs) => {
-                if let Err(e) = bulk_wfuzz(ip.deref(), &username, protocol.deref(), web_dirs) {
+                let arc_ip = Arc::clone(&ip);
+                let arc_username = Arc::clone(&username);
+                let arc_protocol = Arc::clone(&protocol);
+                if let Err(e) = bulk_wfuzz(&**arc_ip, &**arc_username, &**arc_protocol, web_dirs) {
                     return Err(e)
                 }
             },
@@ -330,23 +333,36 @@ impl TargetMachineNmapped {
 }
 
 
-fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>) -> Result<Vec<String>, Box<dyn Error>> {
-    let mut web_dirs: Vec<String> = vec![];
-    for port in ports.iter() {
-        let arc_ip = Arc::clone(&ip);
-        let arc_username = Arc::clone(&username);
-        let arc_protocol = Arc::clone(&protocol);
-        let arc_target = Arc::clone(&target);
-        match gobuster_scan(arc_ip.deref(), arc_username.deref(), arc_protocol.deref(), arc_target.deref(), port) {
-            Ok(gobuster) => {
-                for dir in gobuster.iter() {
-                    let dir: Vec<&str> = dir.split(" ").collect();
-                    let finding = format!("{}://{}:{}{}", protocol, target, port, dir[0]);
-                    web_dirs.push(finding)
+fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>) -> Result<Arc<Mutex<Vec<String>>>, Box<dyn Error>> {
+    let web_dirs = Arc::new(Mutex::new(vec![]));
+    let mut gobuster_threads = vec![];
+    //let ports = Arc::try_unwrap(ports).unwrap().to_owned();
+    for port in ports.iter().cloned() {
+        let ip = Arc::clone(&ip);
+        let username = Arc::clone(&username);
+        let protocol = Arc::clone(&protocol);
+        let target = Arc::clone(&target);
+        let port = port.to_owned();
+        gobuster_threads.push(thread::spawn({
+            let vec_clone = Arc::clone(&web_dirs);
+            move || {
+                match gobuster_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), &port) {
+                    Ok(gobuster) => {
+                        for dir in gobuster.iter() {
+                            let dir: Vec<&str> = dir.split(" ").collect();
+                            let finding = format!("{}://{}:{}{}", protocol, target, port, dir[0]);
+                            let mut v = vec_clone.lock().unwrap();
+                            v.push(finding);
+                        }
+                    },
+                    Err(e) => eprintln!("{}", e)
                 }
-            },
-            Err(e) => eprintln!("{}", e)
-        }
+            }
+        }));
+    }
+
+    for t in gobuster_threads {
+        t.join().unwrap();
     }
 
     Ok(web_dirs)
@@ -379,7 +395,7 @@ fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
 }
 
 
-fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Vec<String>) -> Result<(), Box<dyn Error>> {
+fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn Error>> {
     let filename = format!("{}/wfuzz_{}", ip, protocol);
     create_output_file(username, &filename)?;
 
@@ -388,18 +404,33 @@ fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Vec<String>) ->
                                   .write(true)
                                   .open(&filename)?;
 
-    let mut web_files: Vec<String> = vec![];
-    for target in targets.iter() {
-        match wfuzz_scan(target) {
-            Ok(wfuzz) => {
-                for file in wfuzz.iter() {
-                    web_files.push(file.to_string());
+    let web_files = Arc::new(Mutex::new(vec![]));
+    let mut wfuzz_threads = vec![];
+    let targets = Arc::try_unwrap(targets).unwrap().into_inner().unwrap();
+    let targets = Arc::new(targets);
+    let targets = Arc::clone(&targets);
+    for target in targets.iter().cloned() {
+        wfuzz_threads.push(thread::spawn({
+            let vec_clone = Arc::clone(&web_files);
+            move || {
+                match wfuzz_scan(&target) {
+                    Ok(wfuzz) => {
+                        for file in wfuzz.iter() {
+                            let mut v = vec_clone.lock().unwrap();
+                            v.push(file.to_string());
+                        }
+                    },
+                    Err(e) => eprintln!("{}", e)
                 }
-            },
-            Err(e) => eprintln!("{}", e)
-        }
+            }
+        }));
     }
 
+    for t in wfuzz_threads {
+        t.join().unwrap();
+    }
+
+    let web_files = Arc::try_unwrap(web_files).unwrap().into_inner().unwrap();
     writeln!(&file_handle, "{}", web_files.join("\n"))?;
 
     Ok(())

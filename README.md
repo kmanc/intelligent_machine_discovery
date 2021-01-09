@@ -24,18 +24,13 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
     - [/usr/share/wordlists/seclists/raft-medium-files.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-files.txt)
 
 #### TODO
-  Bugfixes
-    - I'm pretty sure some of the concurrency does not work as intended
-    - There is bound to be more
+- Bugfixes
+    - There is bound to be a few
 - Offer options
     - There are lots of hard-coded things that can't be changed in v0.1.0
-- A real README
-    - What imd is
-    - How to use it
+- A better README
     - Plans for the future
     - How to interpret results
-- HTTPS scanning
-    - Basically the same stuff as HTTP
 - FTP scanning
     - Check for anonymous access
 - Other

@@ -190,10 +190,7 @@ impl TargetMachine {
 
 
     fn nmap_scan_common(&self, username: &str) -> Result<TargetMachineNmapped, Box<dyn Error>> {
-        let begin_message = format!("Running \"nmap -sV {}\" (plus a few NSE scripts) for information on common ports", &self.ip().to_string());
-        let end_message = "Done";
-        let place = placeholder(&begin_message, end_message);
-        print!("{}{}", begin_message, place);
+        println!("Running \"nmap -sV {}\" (plus a few NSE scripts) for information on common ports", &self.ip().to_string());
         // Format filename for use in the nmap function and parser
         let filename = format!("{}/nmap_common", &self.ip().to_string());
         // Create the common port nmap scan file, which will be used to determine what else to run
@@ -229,10 +226,8 @@ impl TargetMachine {
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
-        println!("{}", end_message);
-        let begin_message = format!("Reading results from \"nmap -sV {}\" to determine next steps", &self.ip().to_string());
-        let place = placeholder(&begin_message, end_message);
-        print!("{}{}", begin_message, place);
+        println!("\tCompleted nmap scan on {}'s common ports", &self.ip().to_string());
+        println!("Reading results from \"nmap -sV {}\" to determine next steps", &self.ip().to_string());
 
         // We put spaces in front of each service to make sure we don't double count http and ssl/http later
         let services = vec!["ftp", "ssh", "http", "ssl/http"];
@@ -249,7 +244,7 @@ impl TargetMachine {
                 }
             }
         }
-        println!("{}", end_message);
+        println!("\tCompleted planning next steps based on nmap scan");
 
         let hostname = match self.hostname() {
             Some(hostname) => Some(hostname.to_string()),
@@ -469,10 +464,7 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 
 fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
-    let begin_message = format!("Starting gobuster directory scan on {}", &gobuster_arg);
-    let end_message = "Done";
-    let place = placeholder(&begin_message, end_message);
-    print!("{}{}", begin_message, place);
+    println!("Starting gobuster directory scan on {}", &gobuster_arg);
     let filename = format!("{}/dirs_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
 
@@ -507,7 +499,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
         gobuster.push(String::from(""));
     }
 
-    println!("{}", end_message);
+    println!("\tCompleted gobuster scan for {}", &gobuster_arg);
 
     // Return gobuster results
     Ok(gobuster)
@@ -516,10 +508,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
 
 fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: String) -> Result<(), Box<dyn Error>> {
     let nikto_arg = format!("{}://{}:{}", protocol, target, port);
-    let begin_message = format!("Starting a 60 second max nikto scan on {}", nikto_arg);
-    let end_message = "Done";
-    let place = placeholder(&begin_message, end_message);
-    print!("{}{}", begin_message, place);
+    println!("Starting a 60 second max nikto scan on {}", nikto_arg);
     let filename = format!("{}/nikto_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
 
@@ -537,16 +526,13 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
             .stdout(file_handle)
             .output()?;
 
-    println!("{}", end_message);
+    println!("\tCompleted nikto scan on {}", nikto_arg);
     Ok(())
 }
 
 
 fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> {
-    let begin_message = format!("Running \"nmap -p- {}\" for information on all TCP ports", ip);
-    let end_message = "Done";
-    let place = placeholder(&begin_message, end_message);
-    print!("{}{}", begin_message, place);
+    println!("Running \"nmap -p- {}\" for information on all TCP ports", ip);
     let filename = format!("{}/nmap_all_tcp", ip);
     create_output_file(username, &filename)?;
 
@@ -562,17 +548,14 @@ fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> 
             .stdout(file_handle)
             .output()?;
 
-    println!("{}", end_message);
+    println!("\tCompleted nmap scan on all of {}'s TCP ports", ip);
 
     Ok(())
 }
 
 
 fn showmount_scan(ip: &str, username: &str) -> Result<(), Box<dyn Error>> {
-    let begin_message = format!("Running \"showmount -e {}\" to list all NFS shares", ip);
-    let end_message = "Done";
-    let place = placeholder(&begin_message, end_message);
-    print!("{}{}", begin_message, place);
+    println!("Running \"showmount -e {}\" to list all NFS shares", ip);
     let filename = format!("{}/nfs_shares", ip);
     create_output_file(username, &filename)?;
 
@@ -588,16 +571,13 @@ fn showmount_scan(ip: &str, username: &str) -> Result<(), Box<dyn Error>> {
             .stdout(file_handle)
             .output()?;
 
-    println!("{}", end_message);
+    println!("\tCompleted scan for NFS shares");
     Ok(())
 }
 
 
 fn wfuzz_scan(full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
-    let begin_message = format!("Starting wfuzz scan for {}", full_target);
-    let end_message = "Done";
-    let place = placeholder(&begin_message, end_message);
-    print!("{}{}", begin_message, place);
+    println!("Starting wfuzz scan for {}", full_target);
     // Format a string to pass to wfuzz
     let wfuzz_arg = format!("{}/FUZZ", full_target);
     // Wfuzz + a million arguments
@@ -641,7 +621,7 @@ fn wfuzz_scan(full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
             wfuzz_out.push(String::from(found))
         }
     }
-    println!("{}", end_message);
+    println!("\tCompleted wfuzz scan for {}", full_target);
 
     // Return wfuzz results
     Ok(wfuzz_out)
@@ -673,11 +653,6 @@ pub fn create_dir(username: &str, dir_name: &str) -> Result<(), Box<dyn Error>> 
             .output()?;
 
     Ok(())
-}
-
-
-fn placeholder(begin: &str, end: &str) -> String {
-    ".".repeat(100 - begin.len() - end.len())
 }
 
 

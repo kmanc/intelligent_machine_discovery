@@ -10,8 +10,11 @@ USE:
 EXAMPLES:
 
 `sudo ./imd 10.10.10.215`
+
 `sudo ./imd 10.10.10.215 academy.htb`
+
 `sudo ./imd 10.10.10.215 10.10.10.216 10.10.10.217`
+
 `sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb`
 
 NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already

@@ -41,3 +41,5 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
     - Colorize high interest text?
 - "TLDR" output
     - Basically a quick reference of highlights
+- Code cleanup
+    - Still learning a lot of this stuff so it's not pretty

@@ -15,7 +15,7 @@ EXAMPLES:
 
 `sudo ./imd 10.10.10.215 10.10.10.216 10.10.10.217`
 
-`sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb`
+`sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb 10.10.10.218 10.10.10.219 10.10.10.220 10.10.10.221 attended.htb`
 
 NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)
@@ -30,7 +30,7 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
 - Bugfixes
     - There is bound to be a few
 - Offer options
-    - There are lots of hard-coded things that can't be changed in v0.1.0
+    - There are lots of hard-coded things that can't be changed through v1.0.0
 - A better README
     - Plans for the future
     - How to interpret results

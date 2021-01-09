@@ -5,11 +5,14 @@ It is the evolution of a shell script I wrote for my OSCP exam that I decided to
 
 USE:
 
-`sudo ./imd <ip_address> [-h <hostname>]`
+`sudo ./imd <ip_address> [<hostname> [<ip_address> [<hostname]]]`
 
-EXAMPLE:
+EXAMPLES:
 
-`sudo ./imd 10.10.10.215 -h academy.htb`
+`sudo ./imd 10.10.10.215`
+`sudo ./imd 10.10.10.215 academy.htb`
+`sudo ./imd 10.10.10.215 10.10.10.216 10.10.10.217`
+`sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb`
 
 NOTE: In order to run early versions of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)
@@ -21,20 +24,13 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
     - [/usr/share/wordlists/seclists/raft-medium-files.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-files.txt)
 
 #### TODO
-- General code cleanup
-    - Most of v1 is hacked together to get it to work. It's not pretty (yet)
-  Bugfixes
-    - I'm pretty sure some of the concurrency does not work as intended
-    - There is bound to be more
+- Bugfixes
+    - There is bound to be a few
 - Offer options
     - There are lots of hard-coded things that can't be changed in v0.1.0
-- A real README
-    - What imd is
-    - How to use it
+- A better README
     - Plans for the future
     - How to interpret results
-- HTTPS scanning
-    - Basically the same stuff as HTTP
 - FTP scanning
     - Check for anonymous access
 - Other
@@ -45,5 +41,5 @@ NOTE: In order to run early versions of IMD you will need a few things on your m
     - Colorize high interest text?
 - "TLDR" output
     - Basically a quick reference of highlights
-- Rust best practices
-    - I'm sure there's plenty
+- Code cleanup
+    - Still learning a lot of this stuff so it's not pretty

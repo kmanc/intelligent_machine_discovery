@@ -32,7 +32,7 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
 sudo ./imd <ip_address> [<hostname> [<ip_address> [<hostname]]]
 ```
 
-####Examples
+#### Examples
 
 ```
 sudo ./imd 10.10.10.215

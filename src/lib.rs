@@ -60,7 +60,7 @@ impl Config {
                     // If last is None
                     if last == None {
                         // Return an error because either the person typo'd an IP address or entered two straight hostnames
-                        return Err(format!("The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg).into());
+                        return Err(format!("Fatal - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg).into());
                     }
                     // Otherwise if last is not None
                     else if last != None {
@@ -83,15 +83,14 @@ impl Config {
 
         // If there hasn't been a single target parsed, exit because we have nothing to do
         if targets.len() == 0 {
-            return Err("Please provide at least one valid IP address as a target".into());
+            return Err("Fatal - Please provide at least one valid IP address as a target".into());
         }
 
         // Get the user associated with the active shell session for folder and file permissions later or use root if we fail
         let username = capture_username();
         let username = match username {
             Ok(username) => username,
-            Err(e) => {
-                eprintln!("Using \"root\" for file permissions because of error: {}", e);
+            Err(_) => {
                 String::from("root")
             }
         };
@@ -337,7 +336,8 @@ impl TargetMachineNmapped {
         let arc_target = Arc::clone(&target);
         let arc_ports = Arc::clone(&ports);
         if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, arc_ports, tx.clone()) {
-            eprintln!("{}", e);
+            //eprintln!("{}", e);
+            tx.send(e.to_string()).unwrap();
         }
 
         Ok(())
@@ -358,7 +358,7 @@ fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, 
             let vec_clone = Arc::clone(&web_dirs);
             let tx = tx.clone();
             move || {
-                match gobuster_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), &port, tx) {
+                match gobuster_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), &port, tx.clone()) {
                     Ok(gobuster) => {
                         for dir in gobuster.iter() {
                             let dir: Vec<&str> = dir.split(" ").collect();
@@ -367,7 +367,7 @@ fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, 
                             v.push(finding);
                         }
                     },
-                    Err(e) => eprintln!("{}", e)
+                    Err(e) => tx.send(e.to_string()).unwrap()
                 }
             }
         }));
@@ -392,17 +392,15 @@ fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
         nikto_threads.push(thread::spawn({
             let tx = tx.clone();
             move || {
-                if let Err(e) = nikto_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), port, tx) {
-                    eprintln!("{}", e);
+                if let Err(e) = nikto_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), port, tx.clone()) {
+                    tx.send(e.to_string()).unwrap()
                 }
             }
         }));
     }
     // Make sure all nikto threads complete
     for thread in nikto_threads {
-        if let Err(e) = thread.join(){
-            eprintln!("{:?}", e);
-        }
+        thread.join().unwrap();
     }
 
     Ok(())
@@ -429,14 +427,14 @@ fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<S
             let tx = tx.clone();
             let ip_target = ip.to_string();
             move || {
-                match wfuzz_scan(ip_target,&target, tx) {
+                match wfuzz_scan(ip_target,&target, tx.clone()) {
                     Ok(wfuzz) => {
                         for file in wfuzz.iter() {
                             let mut v = vec_clone.lock().unwrap();
                             v.push(file.to_string());
                         }
                     },
-                    Err(e) => eprintln!("{}", e)
+                    Err(e) => tx.send(e.to_string()).unwrap()
                 }
             }
         }));
@@ -695,7 +693,7 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
     let sudo = sudo.stdout;
     // Return an error if result was not [48, 10] (ie ascii "0\n") because we don't have sudo permissions
     if !(sudo[0] == 48 && sudo[1] == 10) {
-        return Err("\"imd\" needs elevated privileges - please run with \"sudo\"".into())
+        return Err("Fatal - \"imd\" needs elevated privileges; please run with \"sudo\"".into())
     }
 
     Ok(())
@@ -731,8 +729,8 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     discovery_threads.push(thread::spawn({
         let tx = tx.clone();
         move || {
-            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref(), tx){
-                eprintln!("{}", e);
+            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref(), tx.clone()){
+                tx.send(e.to_string()).unwrap()
             }
         }
     }));
@@ -745,8 +743,8 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     discovery_threads.push(thread::spawn({
         let tx = tx.clone();
         move || {
-            if let Err(e) = showmount_scan(arc_ip.deref(), arc_username.deref(), tx){
-                eprintln!("{}", e);
+            if let Err(e) = showmount_scan(arc_ip.deref(), arc_username.deref(), tx.clone()){
+                tx.send(e.to_string()).unwrap()
             }
         }
     }));
@@ -759,7 +757,7 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
         let arc_protocol = Arc::new("http".to_string());
         let arc_services = Arc::new(target_machine_nmapped.services().get("http").unwrap());
         if let Err(e) = target_machine_nmapped.web_bundle(arc_username, arc_protocol, arc_services, tx.clone()) {
-            eprintln!("{}", e);
+            tx.send(e.to_string()).unwrap()
         }
     }
     if target_machine_nmapped.services().contains_key("ssl/http") {
@@ -767,15 +765,13 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
         let arc_protocol = Arc::new("https".to_string());
         let arc_services = Arc::new(target_machine_nmapped.services().get("ssl/http").unwrap());
         if let Err(e) = target_machine_nmapped.web_bundle(arc_username, arc_protocol, arc_services, tx.clone()) {
-            eprintln!("{}", e);
+            tx.send(e.to_string()).unwrap()
         }
     }
 
     // Make sure both the nmap -p- and showmount threads complete
     for thread in discovery_threads {
-        if let Err(e) = thread.join(){
-            eprintln!("{:?}", e);
-        }
+        thread.join().unwrap();
     }
 
     Ok(())

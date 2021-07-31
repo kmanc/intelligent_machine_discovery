@@ -168,7 +168,7 @@ impl TargetMachine {
             return Err(format!("4 / 4 attempts to ping \"{}\" failed, please check connectivity", self.ip).into())
         }
 
-        let message = format!("{} - Confirmed connectivity", self.ip.to_string());
+        let message = format!("{} - Verified connectivity", self.ip.to_string());
         tx.send(message).unwrap();
 
         Ok(())
@@ -197,7 +197,7 @@ impl TargetMachine {
 
 
     fn nmap_scan_common(&self, username: &str, tx: mpsc::Sender<String>) -> Result<TargetMachineNmapped, Box<dyn Error>> {
-        let message = format!("{} - \"nmap -sV\" (plus a few NSE scripts) for information on common ports", &self.ip().to_string());
+        let message = format!("{} - Running \"nmap -sV\" (plus a few NSE scripts) for information on common ports", &self.ip().to_string());
         tx.send(message).unwrap();
         // Format filename for use in the nmap function and parser
         let filename = format!("{}/nmap_common", &self.ip().to_string());
@@ -234,7 +234,7 @@ impl TargetMachine {
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
-        let message = format!("{} - Completed nmap scan on common ports", &self.ip().to_string());
+        let message = format!("{} - Completed nmap scan on common ports, see {}", &self.ip().to_string(), filename);
         tx.send(message).unwrap();
         let message = format!("{} - Reading results from nmap to determine next steps", &self.ip().to_string());
         tx.send(message).unwrap();
@@ -450,6 +450,9 @@ fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<S
     let web_files = Arc::try_unwrap(web_files).unwrap().into_inner().unwrap();
     writeln!(&file_handle, "{}", web_files.join("\n"))?;
 
+    let message = format!("{} - Completed all wfuzz scans, see {}", ip, filename);
+    tx.send(message).unwrap();
+
     Ok(())
 }
 
@@ -517,7 +520,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
         gobuster.push(String::from(""));
     }
 
-    let message = format!("{} - Completed gobuster scan against {}", target, gobuster_arg);
+    let message = format!("{} - Completed gobuster scan against {}, see {}", target, gobuster_arg, filename);
     tx.send(message).unwrap();
 
     // Return gobuster results
@@ -535,7 +538,7 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(filename)?;
+                                  .open(&filename)?;
 
     // Run the nikto command with a few flags, and use the file handle for stdout
     Command::new("nikto")
@@ -546,7 +549,7 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
             .stdout(file_handle)
             .output()?;
 
-    let message = format!("{} - Completed nikto scan against {}", target, nikto_arg);
+    let message = format!("{} - Completed nikto scan against {}, see {}", target, nikto_arg, filename);
     tx.send(message).unwrap();
 
     Ok(())
@@ -571,7 +574,7 @@ fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> R
             .stdout(file_handle)
             .output()?;
 
-    let message = format!("{} - Completed nmap scan on all TCP ports", ip);
+    let message = format!("{} - Completed nmap scan on all TCP ports, see {}", ip, filename);
     tx.send(message).unwrap();
 
     Ok(())
@@ -596,7 +599,7 @@ fn showmount_scan(ip: &str, username: &str, tx: mpsc::Sender<String>) -> Result<
             .stdout(file_handle)
             .output()?;
 
-    let message = format!("{} - Completed scan for NFS shares", ip);
+    let message = format!("{} - Completed scan for NFS shares, see {}", ip, filename);
     tx.send(message).unwrap();
     Ok(())
 }
@@ -648,9 +651,6 @@ fn wfuzz_scan(ip: String, full_target: &str, tx: mpsc::Sender<String>) -> Result
             wfuzz_out.push(String::from(found))
         }
     }
-
-    let message = format!("{} - Completed wfuzz scan against {}", ip, full_target);
-    tx.send(message).unwrap();
 
     // Return wfuzz results
     Ok(wfuzz_out)

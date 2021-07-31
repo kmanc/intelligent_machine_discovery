@@ -151,8 +151,9 @@ impl TargetMachine {
     }
 
 
-    pub fn check_connection(&self) -> Result<(), Box<dyn Error>> {
-        println!("Verifying connectivity to {}", self.ip.to_string());
+    pub fn check_connection(&self, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+        let message = format!("{} - Verifying connectivity", self.ip.to_string());
+        tx.send(message).unwrap();
         // Ping the target 4 times
         let ping = Command::new("ping")
                            .arg("-c")
@@ -166,6 +167,9 @@ impl TargetMachine {
         if ping.contains("100% packet loss") || ping.contains("100.0% packet loss") {
             return Err(format!("4 / 4 attempts to ping \"{}\" failed, please check connectivity", self.ip).into())
         }
+
+        let message = format!("{} - Confirmed connectivity", self.ip.to_string());
+        tx.send(message).unwrap();
 
         Ok(())
     }
@@ -534,8 +538,9 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
 }
 
 
-fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> {
-    println!("Running \"nmap -p- {}\" for information on all TCP ports", ip);
+fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    let message = format!("{} - Running \"nmap -p-\" for information on all TCP ports", ip);
+    tx.send(message).unwrap();
     let filename = format!("{}/nmap_all_tcp", ip);
     create_output_file(username, &filename)?;
 
@@ -551,7 +556,8 @@ fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> 
             .stdout(file_handle)
             .output()?;
 
-    println!("\tCompleted nmap scan on all of {}'s TCP ports", ip);
+    let message = format!("{} - Completed nmap scan on all TCP ports", ip);
+    tx.send(message).unwrap();
 
     Ok(())
 }
@@ -645,8 +651,9 @@ pub fn capture_username() -> Result<String, Box<dyn Error>> {
 }
 
 
-pub fn create_dir(username: &str, dir_name: &str) -> Result<(), Box<dyn Error>> {
-    println!("Creating directory \"{}\" to store resulting files in", dir_name);
+pub fn create_dir(username: &str, dir_name: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    let message = format!("{} - Creating directory to store results in", dir_name);
+    tx.send(message).unwrap();
     // Create a file as the provided user with the desired name
     Command::new("sudo")
             .arg("-u")
@@ -686,11 +693,13 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
         target_machine.add_to_hosts(tx)?;
     }
 
+    let tx = tx.clone();
     // Ping the machine to make sure it is alive and reachable
-    target_machine.check_connection()?;
+    target_machine.check_connection(tx)?;
 
+    let tx = tx.clone();
     // Create directory for storing things in
-    create_dir(&username,&ip)?;
+    create_dir(&username,&ip, tx)?;
 
     // Create thread vector for nmap and showmount
     let mut discovery_threads = vec![];
@@ -701,10 +710,11 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     // Clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);
     let arc_username = Arc::clone(&username);
+    let tx = tx.clone();
 
     // Run an nmap scan on all tcp ports in a thread
     discovery_threads.push(thread::spawn(move || {
-            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref()){
+            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref(), tx){
                 eprintln!("{}", e);
             }
     }));
@@ -712,6 +722,7 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     // Re-clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);
     let arc_username = Arc::clone(&username);
+    let tx = tx.clone();
 
     // Run a showmount scan in a thread
     discovery_threads.push(thread::spawn(move || {

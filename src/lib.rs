@@ -5,7 +5,7 @@ use std::io::Write;
 use std::net::IpAddr;
 use std::ops::Deref;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 pub struct Config {
@@ -113,8 +113,9 @@ impl Config {
 
 
 impl TargetMachine {
-    pub fn add_to_hosts(&self) -> Result<(), Box<dyn Error>> {
-        println!("Checking /etc/hosts file for {} {}", self.ip, self.hostname.as_deref().unwrap());
+    pub fn add_to_hosts(&self, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+        let message = format!("{} - Adding entry for {} to /etc/hosts file", self.ip, self.hostname.as_deref().unwrap());
+        tx.send(message).unwrap();
         // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
         let filename = "/etc/hosts";
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
@@ -139,17 +140,20 @@ impl TargetMachine {
             // Write the IP/hostname pair to /etc/hosts
             writeln!(&file_handle, "{} {}", self.ip, self.hostname.as_deref().unwrap())?;
 
-            println!("\t/etc/hosts updated");
+            let message = format!("{} - Added {} to /etc/hosts", self.ip, self.hostname.as_deref().unwrap());
+            tx.send(message).unwrap();
         } else {
-            println!("\t/etc/hosts already contains {} {}", self.ip, self.hostname.as_deref().unwrap());
+            let message = format!("{} - Skipped adding {} to /etc/hosts since it's already there", self.ip, self.hostname.as_deref().unwrap());
+            tx.send(message).unwrap();
         }
 
         Ok(())
     }
 
 
-    pub fn check_connection(&self) -> Result<(), Box<dyn Error>> {
-        println!("Verifying connectivity to {}", self.ip.to_string());
+    pub fn check_connection(&self, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+        let message = format!("{} - Verifying connectivity", self.ip.to_string());
+        tx.send(message).unwrap();
         // Ping the target 4 times
         let ping = Command::new("ping")
                            .arg("-c")
@@ -163,6 +167,9 @@ impl TargetMachine {
         if ping.contains("100% packet loss") || ping.contains("100.0% packet loss") {
             return Err(format!("4 / 4 attempts to ping \"{}\" failed, please check connectivity", self.ip).into())
         }
+
+        let message = format!("{} - Verified connectivity", self.ip.to_string());
+        tx.send(message).unwrap();
 
         Ok(())
     }
@@ -189,8 +196,9 @@ impl TargetMachine {
     }
 
 
-    fn nmap_scan_common(&self, username: &str) -> Result<TargetMachineNmapped, Box<dyn Error>> {
-        println!("Running \"nmap -sV {}\" (plus a few NSE scripts) for information on common ports", &self.ip().to_string());
+    fn nmap_scan_common(&self, username: &str, tx: mpsc::Sender<String>) -> Result<TargetMachineNmapped, Box<dyn Error>> {
+        let message = format!("{} - Running \"nmap -sV\" (plus a few NSE scripts) for information on common ports", &self.ip().to_string());
+        tx.send(message).unwrap();
         // Format filename for use in the nmap function and parser
         let filename = format!("{}/nmap_common", &self.ip().to_string());
         // Create the common port nmap scan file, which will be used to determine what else to run
@@ -226,8 +234,10 @@ impl TargetMachine {
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
-        println!("\tCompleted nmap scan on {}'s common ports", &self.ip().to_string());
-        println!("Reading results from \"nmap -sV {}\" to determine next steps", &self.ip().to_string());
+        let message = format!("{} - Completed nmap scan on common ports, see {}", &self.ip().to_string(), filename);
+        tx.send(message).unwrap();
+        let message = format!("{} - Reading results from nmap to determine next steps", &self.ip().to_string());
+        tx.send(message).unwrap();
 
         // We put spaces in front of each service to make sure we don't double count http and ssl/http later
         let services = vec!["ftp", "ssh", "http", "ssl/http"];
@@ -244,12 +254,14 @@ impl TargetMachine {
                 }
             }
         }
-        println!("\tCompleted planning next steps based on nmap scan");
 
         let hostname = match self.hostname() {
             Some(hostname) => Some(hostname.to_string()),
             None => None
         };
+
+        let message = format!("{} - Completed planning next steps based on nmap scan", &self.ip().to_string());
+        tx.send(message).unwrap();
 
         // Return the map of services and ports we found
         Ok(TargetMachineNmapped::new(
@@ -289,7 +301,7 @@ impl TargetMachineNmapped {
     }
 
 
-    pub fn web_bundle(&self, username: Arc<String>, protocol: Arc<String>, ports: Arc<&Vec<String>>) -> Result<(), Box<dyn Error>> {
+    pub fn web_bundle(&self, username: Arc<String>, protocol: Arc<String>, ports: Arc<&Vec<String>>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
         let ip = self.ip().to_string();
         let ip = Arc::new(ip);
 
@@ -306,12 +318,12 @@ impl TargetMachineNmapped {
         let arc_target = Arc::clone(&target);
         let arc_ports = Arc::clone(&ports);
 
-        match bulk_gobuster(arc_ip, arc_username, arc_protocol, arc_target, arc_ports) {
+        match bulk_gobuster(arc_ip, arc_username, arc_protocol, arc_target, arc_ports, tx.clone()) {
             Ok(web_dirs) => {
                 let arc_ip = Arc::clone(&ip);
                 let arc_username = Arc::clone(&username);
                 let arc_protocol = Arc::clone(&protocol);
-                if let Err(e) = bulk_wfuzz(&**arc_ip, &**arc_username, &**arc_protocol, web_dirs) {
+                if let Err(e) = bulk_wfuzz(&**arc_ip, &**arc_username, &**arc_protocol, web_dirs, tx.clone()) {
                     return Err(e)
                 }
             },
@@ -324,7 +336,7 @@ impl TargetMachineNmapped {
         let arc_protocol = Arc::clone(&protocol);
         let arc_target = Arc::clone(&target);
         let arc_ports = Arc::clone(&ports);
-        if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, arc_ports) {
+        if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, arc_ports, tx.clone()) {
             eprintln!("{}", e);
         }
 
@@ -333,10 +345,9 @@ impl TargetMachineNmapped {
 }
 
 
-fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>) -> Result<Arc<Mutex<Vec<String>>>, Box<dyn Error>> {
+fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>, tx: mpsc::Sender<String>) -> Result<Arc<Mutex<Vec<String>>>, Box<dyn Error>> {
     let web_dirs = Arc::new(Mutex::new(vec![]));
     let mut gobuster_threads = vec![];
-    //let ports = Arc::try_unwrap(ports).unwrap().to_owned();
     for port in ports.iter().cloned() {
         let ip = Arc::clone(&ip);
         let username = Arc::clone(&username);
@@ -345,8 +356,9 @@ fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, 
         let port = port.to_owned();
         gobuster_threads.push(thread::spawn({
             let vec_clone = Arc::clone(&web_dirs);
+            let tx = tx.clone();
             move || {
-                match gobuster_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), &port) {
+                match gobuster_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), &port, tx) {
                     Ok(gobuster) => {
                         for dir in gobuster.iter() {
                             let dir: Vec<&str> = dir.split(" ").collect();
@@ -369,7 +381,7 @@ fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, 
 }
 
 
-fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>) -> Result<(), Box<dyn Error>> {
+fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let mut nikto_threads = vec![];
     for port in ports.iter() {
         let ip = Arc::clone(&ip);
@@ -377,9 +389,12 @@ fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
         let protocol = Arc::clone(&protocol);
         let target = Arc::clone(&target);
         let port = port.to_owned();
-        nikto_threads.push(thread::spawn(move || {
-            if let Err(e) = nikto_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), port){
-                eprintln!("{}", e);
+        nikto_threads.push(thread::spawn({
+            let tx = tx.clone();
+            move || {
+                if let Err(e) = nikto_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), port, tx) {
+                    eprintln!("{}", e);
+                }
             }
         }));
     }
@@ -390,12 +405,11 @@ fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
         }
     }
 
-
     Ok(())
 }
 
 
-fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn Error>> {
+fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<String>>>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let filename = format!("{}/wfuzz_{}", ip, protocol);
     create_output_file(username, &filename)?;
 
@@ -412,8 +426,10 @@ fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<S
     for target in targets.iter().cloned() {
         wfuzz_threads.push(thread::spawn({
             let vec_clone = Arc::clone(&web_files);
+            let tx = tx.clone();
+            let ip_target = ip.to_string();
             move || {
-                match wfuzz_scan(&target) {
+                match wfuzz_scan(ip_target,&target, tx) {
                     Ok(wfuzz) => {
                         for file in wfuzz.iter() {
                             let mut v = vec_clone.lock().unwrap();
@@ -432,6 +448,9 @@ fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<S
 
     let web_files = Arc::try_unwrap(web_files).unwrap().into_inner().unwrap();
     writeln!(&file_handle, "{}", web_files.join("\n"))?;
+
+    let message = format!("{} - Completed all wfuzz scans, see {}", ip, filename);
+    tx.send(message).unwrap();
 
     Ok(())
 }
@@ -462,9 +481,10 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 }
 
 
-fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &str) -> Result<Vec<String>, Box<dyn Error>> {
+fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &str, tx: mpsc::Sender<String>) -> Result<Vec<String>, Box<dyn Error>> {
     let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
-    println!("Starting gobuster directory scan on {}", &gobuster_arg);
+    let message = format!("{} - Running a gobuster directory scan against {}", ip, gobuster_arg);
+    tx.send(message).unwrap();
     let filename = format!("{}/dirs_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
 
@@ -499,23 +519,25 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
         gobuster.push(String::from(""));
     }
 
-    println!("\tCompleted gobuster scan for {}", &gobuster_arg);
+    let message = format!("{} - Completed gobuster scan against {}, see {}", ip, gobuster_arg, filename);
+    tx.send(message).unwrap();
 
     // Return gobuster results
     Ok(gobuster)
 }
 
 
-fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: String) -> Result<(), Box<dyn Error>> {
+fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: String, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let nikto_arg = format!("{}://{}:{}", protocol, target, port);
-    println!("Starting a 60 second max nikto scan on {}", nikto_arg);
+    let message = format!("{} - Running a nikto scan against {}", ip, nikto_arg);
+    tx.send(message).unwrap();
     let filename = format!("{}/nikto_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
 
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()
                                   .write(true)
-                                  .open(filename)?;
+                                  .open(&filename)?;
 
     // Run the nikto command with a few flags, and use the file handle for stdout
     Command::new("nikto")
@@ -526,13 +548,16 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
             .stdout(file_handle)
             .output()?;
 
-    println!("\tCompleted nikto scan on {}", nikto_arg);
+    let message = format!("{} - Completed nikto scan against {}, see {}", ip, nikto_arg, filename);
+    tx.send(message).unwrap();
+
     Ok(())
 }
 
 
-fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> {
-    println!("Running \"nmap -p- {}\" for information on all TCP ports", ip);
+fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    let message = format!("{} - Running \"nmap -p-\" for information on all TCP ports", ip);
+    tx.send(message).unwrap();
     let filename = format!("{}/nmap_all_tcp", ip);
     create_output_file(username, &filename)?;
 
@@ -548,14 +573,16 @@ fn nmap_scan_all_tcp(ip: &String, username: &str) -> Result<(), Box<dyn Error>> 
             .stdout(file_handle)
             .output()?;
 
-    println!("\tCompleted nmap scan on all of {}'s TCP ports", ip);
+    let message = format!("{} - Completed nmap scan on all TCP ports, see {}", ip, filename);
+    tx.send(message).unwrap();
 
     Ok(())
 }
 
 
-fn showmount_scan(ip: &str, username: &str) -> Result<(), Box<dyn Error>> {
-    println!("Running \"showmount -e {}\" to list all NFS shares", ip);
+fn showmount_scan(ip: &str, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    let message = format!("{} - Running \"showmount -e\" to list all NFS shares", ip);
+    tx.send(message).unwrap();
     let filename = format!("{}/nfs_shares", ip);
     create_output_file(username, &filename)?;
 
@@ -571,13 +598,15 @@ fn showmount_scan(ip: &str, username: &str) -> Result<(), Box<dyn Error>> {
             .stdout(file_handle)
             .output()?;
 
-    println!("\tCompleted scan for NFS shares");
+    let message = format!("{} - Completed scan for NFS shares, see {}", ip, filename);
+    tx.send(message).unwrap();
     Ok(())
 }
 
 
-fn wfuzz_scan(full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
-    println!("Starting wfuzz scan for {}", full_target);
+fn wfuzz_scan(ip: String, full_target: &str, tx: mpsc::Sender<String>) -> Result<Vec<String>, Box<dyn Error>>  {
+    let message = format!("{} - Running a wfuzz scan against {}", ip, full_target);
+    tx.send(message).unwrap();
     // Format a string to pass to wfuzz
     let wfuzz_arg = format!("{}/FUZZ", full_target);
     // Wfuzz + a million arguments
@@ -621,7 +650,6 @@ fn wfuzz_scan(full_target: &str) -> Result<Vec<String>, Box<dyn Error>>  {
             wfuzz_out.push(String::from(found))
         }
     }
-    println!("\tCompleted wfuzz scan for {}", full_target);
 
     // Return wfuzz results
     Ok(wfuzz_out)
@@ -642,8 +670,9 @@ pub fn capture_username() -> Result<String, Box<dyn Error>> {
 }
 
 
-pub fn create_dir(username: &str, dir_name: &str) -> Result<(), Box<dyn Error>> {
-    println!("Creating directory \"{}\" to store resulting files in", dir_name);
+pub fn create_dir(username: &str, dir_name: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    let message = format!("{} - Creating directory to store results in", dir_name);
+    tx.send(message).unwrap();
     // Create a file as the provided user with the desired name
     Command::new("sudo")
             .arg("-u")
@@ -673,20 +702,20 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 }
 
 
-pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>) -> Result<(), Box<dyn Error>> {
+pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     // Convert the IP address to a string once for later use
     let ip = target_machine.ip().to_string();
     // Convert the hostname to an Option<String> once for later use
     if target_machine.hostname().is_some() {
         // Check /etc/hosts for the IP/hostname combo and add it if it isn't there
-        target_machine.add_to_hosts()?;
+        target_machine.add_to_hosts(tx.clone())?;
     }
 
     // Ping the machine to make sure it is alive and reachable
-    target_machine.check_connection()?;
+    target_machine.check_connection(tx.clone())?;
 
     // Create directory for storing things in
-    create_dir(&username,&ip)?;
+    create_dir(&username,&ip, tx.clone())?;
 
     // Create thread vector for nmap and showmount
     let mut discovery_threads = vec![];
@@ -699,10 +728,13 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>) -
     let arc_username = Arc::clone(&username);
 
     // Run an nmap scan on all tcp ports in a thread
-    discovery_threads.push(thread::spawn(move || {
-            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref()){
+    discovery_threads.push(thread::spawn({
+        let tx = tx.clone();
+        move || {
+            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref(), tx){
                 eprintln!("{}", e);
             }
+        }
     }));
 
     // Re-clone the Arcs for the thread
@@ -710,20 +742,23 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>) -
     let arc_username = Arc::clone(&username);
 
     // Run a showmount scan in a thread
-    discovery_threads.push(thread::spawn(move || {
-            if let Err(e) = showmount_scan(arc_ip.deref(), arc_username.deref()){
+    discovery_threads.push(thread::spawn({
+        let tx = tx.clone();
+        move || {
+            if let Err(e) = showmount_scan(arc_ip.deref(), arc_username.deref(), tx){
                 eprintln!("{}", e);
             }
+        }
     }));
 
     // Run a common-port nmap scan with service discovery and return a new TargetMachineNmapped, with service data
-    let target_machine_nmapped = target_machine.nmap_scan_common(&username)?;
+    let target_machine_nmapped = target_machine.nmap_scan_common(&username, tx.clone())?;
 
     if target_machine_nmapped.services().contains_key("http") {
         let arc_username = Arc::clone(&username);
         let arc_protocol = Arc::new("http".to_string());
         let arc_services = Arc::new(target_machine_nmapped.services().get("http").unwrap());
-        if let Err(e) = target_machine_nmapped.web_bundle(arc_username, arc_protocol, arc_services) {
+        if let Err(e) = target_machine_nmapped.web_bundle(arc_username, arc_protocol, arc_services, tx.clone()) {
             eprintln!("{}", e);
         }
     }
@@ -731,7 +766,7 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>) -
         let arc_username = Arc::clone(&username);
         let arc_protocol = Arc::new("https".to_string());
         let arc_services = Arc::new(target_machine_nmapped.services().get("ssl/http").unwrap());
-        if let Err(e) = target_machine_nmapped.web_bundle(arc_username, arc_protocol, arc_services) {
+        if let Err(e) = target_machine_nmapped.web_bundle(arc_username, arc_protocol, arc_services, tx.clone()) {
             eprintln!("{}", e);
         }
     }

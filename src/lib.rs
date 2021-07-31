@@ -113,9 +113,9 @@ impl Config {
 
 
 impl TargetMachine {
-    pub fn add_to_hosts(&self, tx: mpsc::Sender<&str>) -> Result<(), Box<dyn Error>> {
+    pub fn add_to_hosts(&self, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
         let message = format!("{} - Adding entry for {} to /etc/hosts file", self.ip, self.hostname.as_deref().unwrap());
-        tx.send(&message);
+        tx.send(message).unwrap();
         // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
         let filename = "/etc/hosts";
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
@@ -141,10 +141,10 @@ impl TargetMachine {
             writeln!(&file_handle, "{} {}", self.ip, self.hostname.as_deref().unwrap())?;
 
             let message = format!("{} - Added {} to /etc/hosts", self.ip, self.hostname.as_deref().unwrap());
-            tx.send(&message);
+            tx.send(message).unwrap();
         } else {
             let message = format!("{} - Skipped adding {} to /etc/hosts since it's already there", self.ip, self.hostname.as_deref().unwrap());
-            tx.send(&message);
+            tx.send(message).unwrap();
         }
 
         Ok(())
@@ -676,7 +676,7 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 }
 
 
-pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, tx: mpsc::Sender<&str>) -> Result<(), Box<dyn Error>> {
+pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     // Convert the IP address to a string once for later use
     let ip = target_machine.ip().to_string();
     // Convert the hostname to an Option<String> once for later use

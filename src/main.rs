@@ -7,7 +7,7 @@ use imd::Config;
 use std::env;
 use std::io::{self, Write};
 use std::process;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::thread;
 
 
@@ -32,13 +32,15 @@ fn main() {
 
     let username = config.username();
     let username = Arc::new(username.to_owned());
+    let (tx, rx) = mpsc::channel();
     let mut threads = vec![];
 
     for target_machine in config.targets().iter().cloned() {
         threads.push(thread::spawn({
+            let tx = tx.clone();
             let username = Arc::clone(&username);
             move || {
-                if let Err(e) = imd::target_discovery(&target_machine, username) {
+                if let Err(e) = imd::target_discovery(&target_machine, username, tx) {
                     eprintln!("{}", e);
                 }
             }
@@ -46,11 +48,19 @@ fn main() {
 
     }
 
+    // Drop the main thread's transmitter or runtime will hang
+	drop(tx);
+
+    // Capture the messages sent across the channel
+    for received in rx {
+        println!("{}", received);
+    }
+
     for t in threads {
         t.join().unwrap();
     }
 
-    // Fix stdout because it somehow gets messed up
     println!("All machine scans complete");
+    // In case stdout got messed up somehow, flush it to fix
     io::stdout().flush().unwrap();
 }

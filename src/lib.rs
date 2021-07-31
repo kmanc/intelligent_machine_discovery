@@ -405,7 +405,6 @@ fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
         }
     }
 
-
     Ok(())
 }
 

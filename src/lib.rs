@@ -483,7 +483,7 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 
 fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &str, tx: mpsc::Sender<String>) -> Result<Vec<String>, Box<dyn Error>> {
     let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
-    let message = format!("{} - Running a gobuster directory scan against {}", target, gobuster_arg);
+    let message = format!("{} - Running a gobuster directory scan against {}", ip, gobuster_arg);
     tx.send(message).unwrap();
     let filename = format!("{}/dirs_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
@@ -519,7 +519,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
         gobuster.push(String::from(""));
     }
 
-    let message = format!("{} - Completed gobuster scan against {}, see {}", target, gobuster_arg, filename);
+    let message = format!("{} - Completed gobuster scan against {}, see {}", ip, gobuster_arg, filename);
     tx.send(message).unwrap();
 
     // Return gobuster results
@@ -529,7 +529,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
 
 fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: String, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let nikto_arg = format!("{}://{}:{}", protocol, target, port);
-    let message = format!("{} - Running a nikto scan against {}", target, nikto_arg);
+    let message = format!("{} - Running a nikto scan against {}", ip, nikto_arg);
     tx.send(message).unwrap();
     let filename = format!("{}/nikto_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
@@ -548,7 +548,7 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
             .stdout(file_handle)
             .output()?;
 
-    let message = format!("{} - Completed nikto scan against {}, see {}", target, nikto_arg, filename);
+    let message = format!("{} - Completed nikto scan against {}, see {}", ip, nikto_arg, filename);
     tx.send(message).unwrap();
 
     Ok(())

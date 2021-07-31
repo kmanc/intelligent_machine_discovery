@@ -688,18 +688,15 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     let ip = target_machine.ip().to_string();
     // Convert the hostname to an Option<String> once for later use
     if target_machine.hostname().is_some() {
-        let tx = tx.clone();
         // Check /etc/hosts for the IP/hostname combo and add it if it isn't there
-        target_machine.add_to_hosts(tx)?;
+        target_machine.add_to_hosts(tx.clone())?;
     }
 
-    let tx = tx.clone();
     // Ping the machine to make sure it is alive and reachable
-    target_machine.check_connection(tx)?;
+    target_machine.check_connection(tx.clone())?;
 
-    let tx = tx.clone();
     // Create directory for storing things in
-    create_dir(&username,&ip, tx)?;
+    create_dir(&username,&ip, tx.clone())?;
 
     // Create thread vector for nmap and showmount
     let mut discovery_threads = vec![];
@@ -710,11 +707,10 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     // Clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);
     let arc_username = Arc::clone(&username);
-    let tx = tx.clone();
 
     // Run an nmap scan on all tcp ports in a thread
     discovery_threads.push(thread::spawn(move || {
-            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref(), tx){
+            if let Err(e) = nmap_scan_all_tcp(arc_ip.deref(), arc_username.deref(), tx.clone()){
                 eprintln!("{}", e);
             }
     }));
@@ -722,7 +718,6 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     // Re-clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);
     let arc_username = Arc::clone(&username);
-    let tx = tx.clone();
 
     // Run a showmount scan in a thread
     discovery_threads.push(thread::spawn(move || {

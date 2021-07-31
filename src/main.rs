@@ -54,8 +54,6 @@ fn main() {
     // Capture the messages sent across the channel
     for received in rx {
         println!("{}", received);
-        // In case stdout got messed up somehow, flush it to fix
-        io::stdout().flush().unwrap();
     }
 
     for t in threads {
@@ -63,6 +61,4 @@ fn main() {
     }
 
     println!("All machine scans complete");
-    // In case stdout got messed up somehow, flush it to fix
-    io::stdout().flush().unwrap();
 }

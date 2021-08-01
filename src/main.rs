@@ -58,8 +58,6 @@ fn main() {
     // Set up stdout for colorized printing
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let mut stderr = StandardStream::stderr(ColorChoice::Always);
-    // Set stderr to Red
-    stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
 
     // Capture the messages sent across the channel
     for received in rx {
@@ -67,6 +65,8 @@ fn main() {
         let color_test: Vec<&str> = received.split(" - ").collect();
         // Check to see if this is a fatal error
         if color_test[0] == ("Fatal") {
+            // Set stderr to Red
+            stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
             // Gracefully tear down after printing error
             writeln!(&mut stderr, "{}", received).unwrap();
             stderr.reset().ok();
@@ -84,6 +84,8 @@ fn main() {
             // Green
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(0, 204, 0)))).ok();
         } else {
+            // Set stderr to Red
+            stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
             // Write to stderr, not stdout
             writeln!(&mut stderr, "{}", received).unwrap();
             // Skip to the next message

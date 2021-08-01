@@ -512,8 +512,12 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
     writeln!(&file_handle, "{}", &gobuster)?;
     // Convert it to a vector by splitting on newlines and allow it to be mutable - also trim each line
     let mut gobuster: Vec<String> = gobuster.split("\n")
-                                          .map(|s| s.trim().to_string())
-                                          .collect();
+                                            .map(|s| s.trim().to_string())
+                                            .collect();
+
+    // Only keep 200s so we don't waste time wfuzzing directories we cannot access
+    gobuster.retain(|i| i.contains("Status: 200"));
+
     // Make sure at a bare minimum the empty string is in there so we will scan the root dir
     if !gobuster.iter().any(|i| i == "") {
         gobuster.push(String::from(""));

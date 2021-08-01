@@ -1,9 +1,10 @@
 [package]
 name = "imd"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Kevin Conley <kmancxc@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+termcolor = "1.1"

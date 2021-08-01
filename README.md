@@ -66,7 +66,6 @@ In order to run early versions of IMD you will need a few things on your machine
     - Users can choose their favorite web file scanner (defaults to wfuzz)
     - Users can specify their wordlist(s) of choice for web directories and files respectively
 - Stdout reporting
-    - Live updates that you can read (even with thread context making this confusing)
     - Point out things of interest as they are found
 - "TLDR" output
     - Basically a quick reference of highlights when all scans are done

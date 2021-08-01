@@ -45,8 +45,8 @@ fn main() {
             let tx = tx.clone();
             let username = Arc::clone(&username);
             move || {
-                if let Err(e) = imd::target_discovery(&target_machine, username, tx) {
-                    eprintln!("{}", e);
+                if let Err(e) = imd::target_discovery(&target_machine, username, tx.clone()) {
+                    tx.send(e.to_string()).unwrap();
                 }
             }
         }));

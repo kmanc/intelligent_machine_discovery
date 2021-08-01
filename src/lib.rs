@@ -118,7 +118,7 @@ impl TargetMachine {
         // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
         let filename = "/etc/hosts";
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
-        let grep_pattern = format!("({})\\s({})$", self.ip, self.hostname.as_deref().unwrap());
+        let grep_pattern = format!("({})(\\s*)([a-zA-Z\\.]*)(\\s*)({})(\\s*)([a-zA-Z\\.]*)(\\s*)$", self.ip, self.hostname.as_deref().unwrap());
         // Grep /etc/hosts for the IP/hostname pair
         let grep = Command::new("grep")
                        .arg("-E")

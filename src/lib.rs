@@ -118,7 +118,7 @@ impl TargetMachine {
         // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
         let filename = "/etc/hosts";
         // Create a pattern to see if the IP/hostname pair is in /etc/hosts
-        let grep_pattern = format!("({})\\s({})$", self.ip, self.hostname.as_deref().unwrap());
+        let grep_pattern = format!("({})(\\s*)([a-zA-Z\\.]*)(\\s*)({})(\\s*)([a-zA-Z\\.]*)(\\s*)$", self.ip, self.hostname.as_deref().unwrap());
         // Grep /etc/hosts for the IP/hostname pair
         let grep = Command::new("grep")
                        .arg("-E")
@@ -221,6 +221,8 @@ impl TargetMachine {
                            .arg("http-title")
                            .arg("--script")
                            .arg("ssl-cert")
+                           .arg("--script")
+                           .arg("ftp-anon")
                            .arg(&self.ip().to_string())
                            .output()?;
 
@@ -510,8 +512,12 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
     writeln!(&file_handle, "{}", &gobuster)?;
     // Convert it to a vector by splitting on newlines and allow it to be mutable - also trim each line
     let mut gobuster: Vec<String> = gobuster.split("\n")
-                                          .map(|s| s.trim().to_string())
-                                          .collect();
+                                            .map(|s| s.trim().to_string())
+                                            .collect();
+
+    // Only keep 200s so we don't waste time wfuzzing directories we cannot access
+    gobuster.retain(|i| i.contains("Status: 200"));
+
     // Make sure at a bare minimum the empty string is in there so we will scan the root dir
     if !gobuster.iter().any(|i| i == "") {
         gobuster.push(String::from(""));
@@ -719,7 +725,7 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     let mut discovery_threads = vec![];
 
     // Create Arcs for IP and username so they can be cloned and sent to the threads
-    let ip= Arc::new(ip);
+    let ip = Arc::new(ip);
 
     // Clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);

@@ -17,9 +17,6 @@ fn main() {
     let (tx, rx) = mpsc::channel();
 
     // Check to see if the user was sudo - if we got an error, alert the user and exit
-    /*if let Err(e) = imd::sudo_check() {
-        tx.send(e.to_string());
-    }*/
     match imd::sudo_check() {
         Err(e) => tx.send(e.to_string()).unwrap(),
         _ => ()
@@ -50,10 +47,9 @@ fn main() {
                 }
             }
         }));
-
     }
 
-    // Drop the main thread's transmitter or runtime will hang
+    // Drop the main thread's transmitter or execution will hang at runtime
 	drop(tx);
     // Set up stdout for colorized printing
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -67,7 +63,7 @@ fn main() {
         if color_test[0] == ("Fatal") {
             // Set stderr to Red
             stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
-            // Gracefully tear down after printing error
+            // Gracefully tear down after printing fatal error
             writeln!(&mut stderr, "{}", received).unwrap();
             stderr.reset().ok();
             process::exit(1);
@@ -78,13 +74,13 @@ fn main() {
         // Grab the first word in that portion
         let color_test = color_test[0];
         if color_test.ends_with("ing") {
-            // Yellow
+            // Stdout --> Yellow
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 255, 0)))).ok();
         } else if color_test.ends_with("ed") {
-            // Green
+            // Stdout --> Green
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(0, 204, 0)))).ok();
         } else {
-            // Set stderr to Red
+            // Stderr --> Red
             stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
             // Write to stderr, not stdout
             writeln!(&mut stderr, "{}", received).unwrap();

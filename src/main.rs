@@ -50,7 +50,6 @@ fn main() {
                 }
             }
         }));
-
     }
 
     // Drop the main thread's transmitter or runtime will hang

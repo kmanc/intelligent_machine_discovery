@@ -719,7 +719,7 @@ pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, t
     let mut discovery_threads = vec![];
 
     // Create Arcs for IP and username so they can be cloned and sent to the threads
-    let ip= Arc::new(ip);
+    let ip = Arc::new(ip);
 
     // Clone the Arcs for the thread
     let arc_ip = Arc::clone(&ip);

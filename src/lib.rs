@@ -221,6 +221,8 @@ impl TargetMachine {
                            .arg("http-title")
                            .arg("--script")
                            .arg("ssl-cert")
+                           .arg("--script")
+                           .arg("ftp-anon")
                            .arg(&self.ip().to_string())
                            .output()?;
 

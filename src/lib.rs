@@ -164,7 +164,7 @@ impl TargetMachine {
 
         // Exit if all 4 packets were lost
         if ping.contains("100% packet loss") || ping.contains("100.0% packet loss") {
-            return Err(format!("4 / 4 attempts to ping \"{}\" failed, please check connectivity", self.ip).into())
+            return Err(format!("{}- 4 / 4 attempts to ping failed, please check connectivity", format!("{: <16}", self.ip)).into())
         }
 
         let message = format!("{}- Verified connectivity", format!("{: <16}", self.ip));

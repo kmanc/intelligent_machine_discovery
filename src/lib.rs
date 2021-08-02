@@ -192,17 +192,8 @@ impl TargetMachine {
     fn nmap_scan_common(&self, username: &str, tx: mpsc::Sender<String>) -> Result<TargetMachineNmapped, Box<dyn Error>> {
         let message = format!("{}- Running \"nmap -sV\" (plus a few NSE scripts) for information on common ports", format!("{: <16}", self.ip));
         tx.send(message).unwrap();
-        // Format filename for use in the nmap function and parser
-        let filename = format!("{}/nmap_common", &self.ip().to_string());
-        // Create the common port nmap scan file, which will be used to determine what else to run
-        create_output_file(username, &filename)?;
 
         let mut service_hashmap: HashMap<String, Vec<String>> = HashMap::new();
-
-        // Obtain a file handle with write permissions
-        let file_handle = OpenOptions::new()
-                                      .write(true)
-                                      .open(&filename)?;
 
         // Run an nmap command with -sV for service discovery and a few scripts that are useful
         let nmap = Command::new("nmap")
@@ -222,6 +213,15 @@ impl TargetMachine {
 
         // Grab the output and convert it to a string
         let nmap = String::from_utf8(nmap.stdout).unwrap();
+
+        // Format filename for use in the nmap function and parser
+        let filename = format!("{}/nmap_common", &self.ip().to_string());
+        // Create the common port nmap scan file, which will be used to determine what else to run
+        create_output_file(username, &filename)?;
+        // Obtain a file handle with write permissions
+        let file_handle = OpenOptions::new()
+                                      .write(true)
+                                      .open(&filename)?;
         // Write the output to a file for the user in a way that allows for later use
         writeln!(&file_handle, "{}", &nmap)?;
         // Convert it to a vector by splitting on newlines - also trim each line
@@ -479,13 +479,6 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
     let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
     let message = format!("{}- Running a gobuster directory scan against {}", format!("{: <16}", ip), gobuster_arg);
     tx.send(message).unwrap();
-    let filename = format!("{}/dirs_{}_port_{}", ip, target, port);
-    create_output_file(username, &filename)?;
-
-    // Obtain a file handle with write permissions
-    let file_handle = OpenOptions::new()
-                                  .write(true)
-                                  .open(&filename)?;
 
     // Run gobuster with a slew of flags
     let gobuster = Command::new("gobuster")
@@ -502,6 +495,14 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
 
     // Grab the output and convert it to a string
     let gobuster = String::from_utf8(gobuster.stdout)?;
+    // Create a file for the output
+    let filename = format!("{}/dirs_{}_port_{}", ip, target, port);
+    create_output_file(username, &filename)?;
+
+    // Obtain a file handle with write permissions
+    let file_handle = OpenOptions::new()
+                                  .write(true)
+                                  .open(&filename)?;
     // Write the output to a file for the user in a way that allows for later use
     writeln!(&file_handle, "{}", &gobuster)?;
     // Convert it to a vector by splitting on newlines and allow it to be mutable - also trim each line
@@ -529,6 +530,18 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
     let nikto_arg = format!("{}://{}:{}", protocol, target, port);
     let message = format!("{}- Running a nikto scan against {}", format!("{: <16}", ip), nikto_arg);
     tx.send(message).unwrap();
+
+    // Run the nikto command with a few flags, and use the file handle for stdout
+    let nikto = Command::new("nikto")
+            .arg("-host")
+            .arg(&nikto_arg)
+            .arg("-maxtime")
+            .arg("60")
+            .output()?;
+
+    // Grab the output and convert it to a string
+    let nikto = String::from_utf8(nikto.stdout)?;
+    // Create a file for the ouput
     let filename = format!("{}/nikto_{}_port_{}", ip, target, port);
     create_output_file(username, &filename)?;
 
@@ -537,14 +550,8 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
                                   .write(true)
                                   .open(&filename)?;
 
-    // Run the nikto command with a few flags, and use the file handle for stdout
-    Command::new("nikto")
-            .arg("-host")
-            .arg(&nikto_arg)
-            .arg("-maxtime")
-            .arg("60")
-            .stdout(file_handle)
-            .output()?;
+    // Write the output to a file for the user in a way that allows for later use
+    writeln!(&file_handle, "{}", &nikto)?;
 
     let message = format!("{}- Completed nikto scan against {}, see {}", format!("{: <16}", ip), nikto_arg, filename);
     tx.send(message).unwrap();
@@ -556,6 +563,17 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
 fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let message = format!("{}- Running \"nmap -p-\" for information on all TCP ports", format!("{: <16}", ip));
     tx.send(message).unwrap();
+
+    // Run an nmap command with -p-, and use the file handle for stdout
+    let nmap = Command::new("nmap")
+            .arg("-p-")
+            .arg(&*ip)
+            .output()?;
+
+    // Grab the output and convert it to a string
+    let nmap = String::from_utf8(nmap.stdout)?;
+
+    // Create a file for the output
     let filename = format!("{}/nmap_all_tcp", ip);
     create_output_file(username, &filename)?;
 
@@ -564,12 +582,8 @@ fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> R
                                   .write(true)
                                   .open(&filename)?;
 
-    // Run an nmap command with -p-, and use the file handle for stdout
-    Command::new("nmap")
-            .arg("-p-")
-            .arg(&*ip)
-            .stdout(file_handle)
-            .output()?;
+    // Write the output to a file for the user in a way that allows for later use
+    writeln!(&file_handle, "{}", &nmap)?;
 
     let message = format!("{}- Completed nmap scan on all TCP ports, see {}", format!("{: <16}", ip), filename);
     tx.send(message).unwrap();
@@ -581,6 +595,17 @@ fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> R
 fn showmount_scan(ip: &str, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let message = format!("{}- Running \"showmount -e\" to list all NFS shares", format!("{: <16}", ip));
     tx.send(message).unwrap();
+
+    // Run the showmount command with -e, and use the file handle for stdout
+    let showmount = Command::new("showmount")
+            .arg("-e")
+            .arg(ip)
+            .output()?;
+
+    // Grab the output and convert it to a string
+    let showmount = String::from_utf8(showmount.stdout)?;
+
+     // Create a file for the output
     let filename = format!("{}/nfs_shares", ip);
     create_output_file(username, &filename)?;
 
@@ -589,12 +614,8 @@ fn showmount_scan(ip: &str, username: &str, tx: mpsc::Sender<String>) -> Result<
                                   .write(true)
                                   .open(&filename)?;
 
-    // Run the showmount command with -e, and use the file handle for stdout
-    Command::new("showmount")
-            .arg("-e")
-            .arg(ip)
-            .stdout(file_handle)
-            .output()?;
+    // Write the output to a file for the user in a way that allows for later use
+    writeln!(&file_handle, "{}", &showmount)?;
 
     let message = format!("{}- Completed scan for NFS shares, see {}", format!("{: <16}", ip), filename);
     tx.send(message).unwrap();

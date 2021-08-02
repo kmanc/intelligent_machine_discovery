@@ -68,6 +68,20 @@ fn main() {
             stderr.reset().ok();
             process::exit(1);
         }
+        // Check to see if it is a non-fatal error (one that I didn't create)
+        if color_test.len() == 1 {
+            // Stderr --> Red
+            stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
+            // Most common error isn't super helpful
+            let received = match &*received {
+                "No such file or directory (os error 2)" => format!("{} - check README dependencies for more info", received),
+                _ => received
+            };
+            // Write to stderr, not stdout
+            writeln!(&mut stderr, "{}", received).unwrap();
+            // Skip to the next message
+            continue
+        }
         // Since it isn't fatal, continue processing by grabbing the next portion
         let color_test = color_test[1];
         let color_test: Vec<&str> = color_test.split(" ").collect();
@@ -79,13 +93,6 @@ fn main() {
         } else if color_test.ends_with("ed") {
             // Stdout --> Green
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(0, 204, 0)))).ok();
-        } else {
-            // Stderr --> Red
-            stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
-            // Write to stderr, not stdout
-            writeln!(&mut stderr, "{}", received).unwrap();
-            // Skip to the next message
-            continue;
         }
         writeln!(&mut stdout, "{}", received).unwrap();
     }

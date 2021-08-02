@@ -28,50 +28,44 @@ pub struct TargetMachineNmapped {
 
 impl Config {
     pub fn new(args: &[String]) -> Result<Config, Box<dyn Error>> {
-        // Start a vector of targets
-        let mut targets: Vec<TargetMachine> = vec![];
-        // Make a "last seen" variable for look-back capability
-        let mut last: Option<IpAddr> = None;
-        // Iterate over the arguments we were given (skipping the first because it will be the executable name)
-        for arg in args[1..].iter() {
-            // Trim the arg in case of whitespace nonsense
-            let arg = arg.trim();
-            // Attempt to parse the argument as an IP address
-            let ip = arg.parse::<IpAddr>();
-            // Match on the IP address, which is either a valid IP or an error
-            match ip {
-                // If the IP address is valid
-                Ok(ip) => {
-                    // If last is None
-                    if last == None {
-                        // Set last to the IP address
-                        last = Some(ip);
-                    }
-                    // Otherwise if last is not None
-                    else if last != None {
-                        // Add a target machine to the list with last as its IP address and None as its hostname
+    // Start a vector of targets
+    let mut targets: Vec<TargetMachine> = vec![];
+    // Make a "last seen" variable for look-back capability
+    let mut last: Option<IpAddr> = None;
+    // Iterate over the arguments we were given (skipping the first because it will be the executable name)
+    for arg in args[1..].iter() {
+        // Trim the arg in case of whitespace nonsense
+        let arg = arg.trim();
+        // Attempt to parse the argument as an IP address
+        let ip = arg.parse::<IpAddr>();
+        // Match on the IP address, which is either a valid IP or an error
+        match ip {
+            // If the IP address is valid
+            Ok(ip) => {
+                last = match last {
+                    // And last == None, set last to the IP address for the next iteration
+                    None => Some(ip),
+                    // If last was something, we have two IPs in a row, so push the last one with no hostname
+                    _ => {
                         targets.push(TargetMachine::new(last.unwrap(), None));
-                        // Then set last as the IP address
-                        last = Some(ip);
+                        Some(ip)
                     }
-                }
-                // If the IP address is an error
-                Err(_) => {
-                    // If last is None
-                    if last == None {
-                        // Return an error because either the person typo'd an IP address or entered two straight hostnames
-                        return Err(format!("Fatal - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg).into());
-                    }
-                    // Otherwise if last is not None
-                    else if last != None {
-                        // Add a target machine to the list with last as its IP address and the argument as its hostname
+                };
+            }
+            // If the IP address is an error
+            Err(_) => {
+                last = match last {
+                    // And last == None, we have two non-IP addresses in a row which isn't allowed currently
+                    None => return Err(format!("Fatal - The argument \"{}\" is not valid. Please enter IP addresses (each optionally followed by one associated hostname)", arg).into()),
+                    // If last was something, that means we just got the hostname to last's IP so push it
+                    _ => {
                         targets.push(TargetMachine::new(last.unwrap(), Some(arg.to_owned())));
-                        // Set last to None
-                        last = None;
+                        None
                     }
-                }
+                };
             }
         }
+    }
 
         // If the last argument supplied was an IP address it needs to be added to the list with no hostname
         if last != None {

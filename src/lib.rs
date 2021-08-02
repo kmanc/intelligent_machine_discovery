@@ -182,7 +182,7 @@ impl TargetMachine {
 
 
     pub fn new(ip: IpAddr, hostname: Option<String>) -> TargetMachine {
-        TargetMachine{
+        TargetMachine {
             ip,
             hostname
         }
@@ -204,7 +204,7 @@ impl TargetMachine {
                                       .write(true)
                                       .open(&filename)?;
 
-        // Run an nmap command with -A flag, and use the file handle for stdout
+        // Run an nmap command with -sV for service discovery and a few scripts that are useful
         let nmap = Command::new("nmap")
                            .arg("-sV")
                            .arg("--script")
@@ -283,7 +283,7 @@ impl TargetMachineNmapped {
 
 
     pub fn new(ip: IpAddr, hostname: Option<String>, services: HashMap<String, Vec<String>>) -> TargetMachineNmapped {
-        TargetMachineNmapped{
+        TargetMachineNmapped {
             ip,
             hostname,
             services
@@ -318,7 +318,7 @@ impl TargetMachineNmapped {
                 let arc_ip = Arc::clone(&ip);
                 let arc_username = Arc::clone(&username);
                 let arc_protocol = Arc::clone(&protocol);
-                if let Err(e) = bulk_wfuzz(&**arc_ip, &**arc_username, &**arc_protocol, web_dirs, tx.clone()) {
+                if let Err(e) = bulk_wfuzz(arc_ip, arc_username, arc_protocol, web_dirs, tx.clone()) {
                     return Err(e)
                 }
             },
@@ -403,9 +403,9 @@ fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
 }
 
 
-fn bulk_wfuzz(ip: &str, username: &str, protocol: &str, targets: Arc<Mutex<Vec<String>>>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+fn bulk_wfuzz(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, targets: Arc<Mutex<Vec<String>>>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let filename = format!("{}/wfuzz_{}", ip, protocol);
-    create_output_file(username, &filename)?;
+    create_output_file(&username, &filename)?;
 
     // Obtain a file handle with write permissions
     let file_handle = OpenOptions::new()

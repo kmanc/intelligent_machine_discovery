@@ -18,6 +18,7 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
 - _If applicable_ nikto scan on ports hosting websites
 - _If applicable_ gobuster directory scan on ports hosting websites
 - _If applicable_ wfuzz file scan on all directories found on ports hosting websites
+- _If applicable_ check for anonymous FTP login
 
 
 ## Setup
@@ -46,7 +47,7 @@ sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb 10.10.1
 
 
 ## <a name="dependencies"></a> Dependencies
-In order to run early versions of IMD you will need a few things on your machine that you may not have already
+In order to get all of the functionality out of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)
 - [Nikto](https://cirt.net/Nikto2)
 - [Gobuster](https://github.com/OJ/gobuster)
@@ -60,7 +61,6 @@ In order to run early versions of IMD you will need a few things on your machine
 - Bugfixes
     - As they are found / reported
 - Configurable options
-    - Users can choose whether or not to run nikto
     - Users can choose how long to let each nikto task to run before stopping it short
     - Users can choose their favorite web directory scanner (defaults to gobuster)
     - Users can choose their favorite web file scanner (defaults to wfuzz)

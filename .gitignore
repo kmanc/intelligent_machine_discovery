@@ -1,6 +1,12 @@
 # Dirs
-target/
+target/debug/*
+target/release/*
 .idea/
 
 # Files
 main
+target/CACHEDIR.TAG
+target/.*
+
+# Exceptions
+!target/release/imd

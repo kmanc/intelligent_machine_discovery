@@ -76,7 +76,7 @@ impl Config {
         }
 
         // If there hasn't been a single target parsed, exit because we have nothing to do
-        if targets.len() == 0 {
+        if targets.is_empty() {
             return Err("Fatal - Please provide at least one valid IP address as a target".into());
         }
 
@@ -107,7 +107,7 @@ impl Config {
 
 impl TargetMachine {
     pub fn add_to_hosts(&self, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
-        let message = format!("{}- Adding entry for {} to /etc/hosts file", format!("{: <16}", self.ip), self.hostname.as_deref().unwrap());
+        let message = format!("{: <16}- Adding entry for {} to /etc/hosts file", self.ip, self.hostname.as_deref().unwrap());
         tx.send(message).unwrap();
         // Create variable for filename "/etc/hosts" because we'll use it in a bunch of places
         let filename = "/etc/hosts";
@@ -133,10 +133,10 @@ impl TargetMachine {
             // Write the IP/hostname pair to /etc/hosts
             writeln!(&file_handle, "{} {}", self.ip, self.hostname.as_deref().unwrap())?;
 
-            let message = format!("{}- Added {} to /etc/hosts", format!("{: <16}", self.ip), self.hostname.as_deref().unwrap());
+            let message = format!("{: <16}- Added {} to /etc/hosts", self.ip, self.hostname.as_deref().unwrap());
             tx.send(message).unwrap();
         } else {
-            let message = format!("{}- Skipped adding {} to /etc/hosts since it's already there", format!("{: <16}", self.ip), self.hostname.as_deref().unwrap());
+            let message = format!("{: <16}- Skipped adding {} to /etc/hosts since it's already there", self.ip, self.hostname.as_deref().unwrap());
             tx.send(message).unwrap();
         }
 
@@ -145,7 +145,7 @@ impl TargetMachine {
 
 
     pub fn check_connection(&self, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
-        let message = format!("{}- Verifying connectivity", format!("{: <16}", self.ip));
+        let message = format!("{: <16}- Verifying connectivity", self.ip);
         tx.send(message).unwrap();
         // Ping the target 4 times
         let ping = Command::new("ping")
@@ -158,10 +158,10 @@ impl TargetMachine {
 
         // Exit if all 4 packets were lost
         if ping.contains("100% packet loss") || ping.contains("100.0% packet loss") {
-            return Err(format!("{}- 4 / 4 attempts to ping failed, please check connectivity", format!("{: <16}", self.ip)).into())
+            return Err(format!("{: <16}- 4 / 4 attempts to ping failed, please check connectivity", self.ip).into())
         }
 
-        let message = format!("{}- Verified connectivity", format!("{: <16}", self.ip));
+        let message = format!("{: <16}- Verified connectivity", self.ip);
         tx.send(message).unwrap();
 
         Ok(())
@@ -190,7 +190,7 @@ impl TargetMachine {
 
 
     fn nmap_scan_common(&self, username: &str, tx: mpsc::Sender<String>) -> Result<TargetMachineNmapped, Box<dyn Error>> {
-        let message = format!("{}- Running \"nmap -sV\" (plus a few NSE scripts) for information on common ports", format!("{: <16}", self.ip));
+        let message = format!("{: <16}- Running \"nmap -sV\" (plus a few NSE scripts) for information on common ports", self.ip);
         tx.send(message).unwrap();
 
         let mut service_hashmap: HashMap<String, Vec<String>> = HashMap::new();
@@ -225,13 +225,13 @@ impl TargetMachine {
         // Write the output to a file for the user in a way that allows for later use
         writeln!(&file_handle, "{}", &nmap)?;
         // Convert it to a vector by splitting on newlines - also trim each line
-        let nmap: Vec<String> = nmap.split("\n")
+        let nmap: Vec<String> = nmap.split('\n')
                                     .map(|s| s.trim().to_string())
                                     .collect();
 
-        let message = format!("{}- Completed nmap scan on common ports, see {}", format!("{: <16}", self.ip), filename);
+        let message = format!("{: <16}- Completed nmap scan on common ports, see {}", self.ip, filename);
         tx.send(message).unwrap();
-        let message = format!("{}- Reading results from nmap to determine next steps", format!("{: <16}", self.ip).to_string());
+        let message = format!("{: <16}- Reading results from nmap to determine next steps", self.ip.to_string());
         tx.send(message).unwrap();
 
         // We put spaces in front of each service to make sure we don't double count http and ssl/http later
@@ -239,10 +239,10 @@ impl TargetMachine {
 
         for service in services {
             for line in nmap.iter() {
-                if line.starts_with("|") {
+                if line.starts_with('|') {
                     continue;
                 }
-                let line: Vec<&str> = line.split(" ").collect();
+                let line: Vec<&str> = line.split(' ').collect();
                 if line.contains(&"open") && line.contains(&service) {
                     let port = get_port_from_line(line);
                     service_hashmap.entry(service.trim().to_string()).or_default().push(port);
@@ -250,12 +250,9 @@ impl TargetMachine {
             }
         }
 
-        let hostname = match self.hostname() {
-            Some(hostname) => Some(hostname.to_string()),
-            None => None
-        };
+        let hostname = self.hostname().map(|hostname| hostname.to_string());
 
-        let message = format!("{}- Completed planning next steps based on nmap scan", format!("{: <16}", self.ip));
+        let message = format!("{: <16}- Completed planning next steps based on nmap scan", self.ip);
         tx.send(message).unwrap();
 
         // Return the map of services and ports we found
@@ -311,9 +308,8 @@ impl TargetMachineNmapped {
         let arc_username = Arc::clone(&username);
         let arc_protocol = Arc::clone(&protocol);
         let arc_target = Arc::clone(&target);
-        let arc_ports = Arc::clone(&ports);
 
-        match bulk_gobuster(arc_ip, arc_username, arc_protocol, arc_target, arc_ports, tx.clone()) {
+        match bulk_gobuster(arc_ip, arc_username, arc_protocol, arc_target, &ports, tx.clone()) {
             Ok(web_dirs) => {
                 let arc_ip = Arc::clone(&ip);
                 let arc_username = Arc::clone(&username);
@@ -330,8 +326,7 @@ impl TargetMachineNmapped {
         let arc_username = Arc::clone(&username);
         let arc_protocol = Arc::clone(&protocol);
         let arc_target = Arc::clone(&target);
-        let arc_ports = Arc::clone(&ports);
-        if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, arc_ports, tx.clone()) {
+        if let Err(e) = bulk_nikto(arc_ip, arc_username, arc_protocol, arc_target, &ports, tx.clone()) {
             //eprintln!("{}", e);
             tx.send(e.to_string()).unwrap();
         }
@@ -341,10 +336,10 @@ impl TargetMachineNmapped {
 }
 
 
-fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>, tx: mpsc::Sender<String>) -> Result<Arc<Mutex<Vec<String>>>, Box<dyn Error>> {
+fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: &[String], tx: mpsc::Sender<String>) -> Result<Arc<Mutex<Vec<String>>>, Box<dyn Error>> {
     let web_dirs = Arc::new(Mutex::new(vec![]));
     let mut gobuster_threads = vec![];
-    for port in ports.iter().cloned() {
+    for port in ports.iter() {
         let ip = Arc::clone(&ip);
         let username = Arc::clone(&username);
         let protocol = Arc::clone(&protocol);
@@ -357,7 +352,7 @@ fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, 
                 match gobuster_scan(ip.deref(), username.deref(), protocol.deref(), target.deref(), &port, tx.clone()) {
                     Ok(gobuster) => {
                         for dir in gobuster.iter() {
-                            let dir: Vec<&str> = dir.split(" ").collect();
+                            let dir: Vec<&str> = dir.split(' ').collect();
                             let finding = format!("{}://{}:{}{}", protocol, target, port, dir[0]);
                             let mut v = vec_clone.lock().unwrap();
                             v.push(finding);
@@ -377,7 +372,7 @@ fn bulk_gobuster(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, 
 }
 
 
-fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: Arc<&Vec<String>>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+fn bulk_nikto(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, target: Arc<String>, ports: &[String], tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let mut nikto_threads = vec![];
     for port in ports.iter() {
         let ip = Arc::clone(&ip);
@@ -423,7 +418,7 @@ fn bulk_wfuzz(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
             let tx = tx.clone();
             let ip_target = ip.to_string();
             move || {
-                match wfuzz_scan(ip_target,&target, tx.clone()) {
+                match wfuzz_scan(ip_target, target, tx.clone()) {
                     Ok(wfuzz) => {
                         for file in wfuzz.iter() {
                             let mut v = vec_clone.lock().unwrap();
@@ -443,7 +438,7 @@ fn bulk_wfuzz(ip: Arc<String>, username: Arc<String>, protocol: Arc<String>, tar
     let web_files = Arc::try_unwrap(web_files).unwrap().into_inner().unwrap();
     writeln!(&file_handle, "{}", web_files.join("\n"))?;
 
-    let message = format!("{}- Completed all wfuzz scans, see {}", format!("{: <16}", ip), filename);
+    let message = format!("{: <16}- Completed all wfuzz scans, see {}", ip, filename);
     tx.send(message).unwrap();
 
     Ok(())
@@ -468,7 +463,7 @@ fn get_port_from_line(line: Vec<&str>) -> String {
     // Convert the first element of the vector to a string
     let port = String::from(line[0]);
     // Split the first element at slashes
-    let port: Vec<&str> = port.split("/").collect();
+    let port: Vec<&str> = port.split('/').collect();
 
     // Return the first portion of the result as a string
     String::from(port[0])
@@ -477,7 +472,7 @@ fn get_port_from_line(line: Vec<&str>) -> String {
 
 fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &str, tx: mpsc::Sender<String>) -> Result<Vec<String>, Box<dyn Error>> {
     let gobuster_arg = format!("{}://{}:{}", protocol, target, port);
-    let message = format!("{}- Running a gobuster directory scan against {}", format!("{: <16}", ip), gobuster_arg);
+    let message = format!("{: <16}- Running a gobuster directory scan against {}", ip, gobuster_arg);
     tx.send(message).unwrap();
 
     // Run gobuster with a slew of flags
@@ -506,7 +501,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
     // Write the output to a file for the user in a way that allows for later use
     writeln!(&file_handle, "{}", &gobuster)?;
     // Convert it to a vector by splitting on newlines and allow it to be mutable - also trim each line
-    let mut gobuster: Vec<String> = gobuster.split("\n")
+    let mut gobuster: Vec<String> = gobuster.split('\n')
                                             .map(|s| s.trim().to_string())
                                             .collect();
 
@@ -514,11 +509,11 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
     gobuster.retain(|i| i.contains("Status: 200"));
 
     // Make sure at a bare minimum the empty string is in there so we will scan the root dir
-    if !gobuster.iter().any(|i| i == "") {
+    if !gobuster.iter().any(|i| i.is_empty()) {
         gobuster.push(String::from(""));
     }
 
-    let message = format!("{}- Completed gobuster scan against {}, see {}", format!("{: <16}", ip), gobuster_arg, filename);
+    let message = format!("{: <16}- Completed gobuster scan against {}, see {}", ip, gobuster_arg, filename);
     tx.send(message).unwrap();
 
     // Return gobuster results
@@ -528,7 +523,7 @@ fn gobuster_scan(ip: &str, username: &str, protocol: &str, target: &str, port: &
 
 fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: String, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     let nikto_arg = format!("{}://{}:{}", protocol, target, port);
-    let message = format!("{}- Running a nikto scan against {}", format!("{: <16}", ip), nikto_arg);
+    let message = format!("{: <16}- Running a nikto scan against {}", ip, nikto_arg);
     tx.send(message).unwrap();
 
     // Run the nikto command with a few flags, and use the file handle for stdout
@@ -553,7 +548,7 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
     // Write the output to a file for the user in a way that allows for later use
     writeln!(&file_handle, "{}", &nikto)?;
 
-    let message = format!("{}- Completed nikto scan against {}, see {}", format!("{: <16}", ip), nikto_arg, filename);
+    let message = format!("{: <16}- Completed nikto scan against {}, see {}", ip, nikto_arg, filename);
     tx.send(message).unwrap();
 
     Ok(())
@@ -561,7 +556,7 @@ fn nikto_scan(ip: &str, username: &str, protocol: &str, target: &str, port: Stri
 
 
 fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
-    let message = format!("{}- Running \"nmap -p-\" for information on all TCP ports", format!("{: <16}", ip));
+    let message = format!("{: <16}- Running \"nmap -p-\" for information on all TCP ports", ip);
     tx.send(message).unwrap();
 
     // Run an nmap command with -p-, and use the file handle for stdout
@@ -585,7 +580,7 @@ fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> R
     // Write the output to a file for the user in a way that allows for later use
     writeln!(&file_handle, "{}", &nmap)?;
 
-    let message = format!("{}- Completed nmap scan on all TCP ports, see {}", format!("{: <16}", ip), filename);
+    let message = format!("{: <16}- Completed nmap scan on all TCP ports, see {}", ip, filename);
     tx.send(message).unwrap();
 
     Ok(())
@@ -593,7 +588,7 @@ fn nmap_scan_all_tcp(ip: &String, username: &str, tx: mpsc::Sender<String>) -> R
 
 
 fn showmount_scan(ip: &str, username: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
-    let message = format!("{}- Running \"showmount -e\" to list all NFS shares", format!("{: <16}", ip));
+    let message = format!("{: <16}- Running \"showmount -e\" to list all NFS shares", ip);
     tx.send(message).unwrap();
 
     // Run the showmount command with -e, and use the file handle for stdout
@@ -617,14 +612,14 @@ fn showmount_scan(ip: &str, username: &str, tx: mpsc::Sender<String>) -> Result<
     // Write the output to a file for the user in a way that allows for later use
     writeln!(&file_handle, "{}", &showmount)?;
 
-    let message = format!("{}- Completed scan for NFS shares, see {}", format!("{: <16}", ip), filename);
+    let message = format!("{: <16}- Completed scan for NFS shares, see {}", ip, filename);
     tx.send(message).unwrap();
     Ok(())
 }
 
 
-fn wfuzz_scan(ip: String, full_target: &str, tx: mpsc::Sender<String>) -> Result<Vec<String>, Box<dyn Error>>  {
-    let message = format!("{}- Running a wfuzz scan against {}", format!("{: <16}", ip), full_target);
+fn wfuzz_scan(ip: String, full_target: String, tx: mpsc::Sender<String>) -> Result<Vec<String>, Box<dyn Error>>  {
+    let message = format!("{: <16}- Running a wfuzz scan against {}", ip, full_target);
     tx.send(message).unwrap();
     // Format a string to pass to wfuzz
     let wfuzz_arg = format!("{}/FUZZ", full_target);
@@ -646,7 +641,7 @@ fn wfuzz_scan(ip: String, full_target: &str, tx: mpsc::Sender<String>) -> Result
     // Remove whitespace
     let wfuzz = wfuzz.trim();
     // Split it by newlines and allow it to be mutable
-    let wfuzz: Vec<String> = wfuzz.split("\n")
+    let wfuzz: Vec<String> = wfuzz.split('\n')
                                   .map(|s| s.trim().to_string())
                                   .collect();
 
@@ -656,16 +651,8 @@ fn wfuzz_scan(ip: String, full_target: &str, tx: mpsc::Sender<String>) -> Result
 
     let mut wfuzz_out = vec![];
     for (index, found) in wfuzz.iter().enumerate() {
-        // The first banner is useful
-        if index == 0 {
-            wfuzz_out.push(String::from(found))
-        }
-        // As is the third banner
-        else if index == 2 {
-            wfuzz_out.push(String::from(found))
-        }
-        // The other useful banners fall between these two offsets
-        else if header_elements_end <= index && index < footer_elements_begin {
+        // Useful banners include: the first, third, and any between the two offsets
+        if index == 0 || index == 2 || (header_elements_end <= index && index < footer_elements_begin) {
             wfuzz_out.push(String::from(found))
         }
     }
@@ -682,7 +669,7 @@ pub fn capture_username() -> Result<String, Box<dyn Error>> {
     // Capture output and convert it to a string
     let who = String::from_utf8(who.stdout).unwrap();
     // Convert to a vector by splitting on spaces
-    let who: Vec<&str> = who.split(" ").collect();
+    let who: Vec<&str> = who.split(' ').collect();
 
     // Return the first element (username) as string
     Ok(String::from(who[0]))
@@ -690,7 +677,7 @@ pub fn capture_username() -> Result<String, Box<dyn Error>> {
 
 
 pub fn create_dir(username: &str, dir_name: &str, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
-    let message = format!("{}- Creating directory to store results in", format!("{: <16}", dir_name));
+    let message = format!("{: <16}- Creating directory to store results in", dir_name);
     tx.send(message).unwrap();
     // Create a file as the provided user with the desired name
     Command::new("sudo")
@@ -721,7 +708,7 @@ pub fn sudo_check() -> Result<(), Box<dyn Error>> {
 }
 
 
-pub fn target_discovery(target_machine: &TargetMachine, username: Arc<String>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+pub fn target_discovery(target_machine: TargetMachine, username: Arc<String>, tx: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
     // Convert the IP address to a string once for later use
     let ip = target_machine.ip().to_string();
     // Convert the hostname to an Option<String> once for later use

@@ -17,9 +17,8 @@ fn main() {
     let (tx, rx) = mpsc::channel();
 
     // Check to see if the user was sudo - if we got an error, alert the user and exit
-    match imd::sudo_check() {
-        Err(e) => tx.send(e.to_string()).unwrap(),
-        _ => ()
+    if let Err(e) = imd::sudo_check() { 
+        tx.send(e.to_string()).unwrap()
     }
 
     // Collect the command line args
@@ -29,7 +28,7 @@ fn main() {
         Ok(config) => config,
         Err(e) => {
             tx.send(e.to_string()).unwrap();
-            Config::new(&vec!["FakeCommand".to_string(), "0.0.0.0".to_string()]).unwrap()
+            Config::new(&["FakeCommand".to_string(), "0.0.0.0".to_string()]).unwrap()
         }
     };
 
@@ -42,7 +41,7 @@ fn main() {
             let tx = tx.clone();
             let username = Arc::clone(&username);
             move || {
-                if let Err(e) = imd::target_discovery(&target_machine, username, tx.clone()) {
+                if let Err(e) = imd::target_discovery(target_machine, username, tx.clone()) {
                     tx.send(e.to_string()).unwrap();
                 }
             }
@@ -84,7 +83,7 @@ fn main() {
         }
         // Since it isn't fatal, continue processing by grabbing the next portion
         let color_test = color_test[1];
-        let color_test: Vec<&str> = color_test.split(" ").collect();
+        let color_test: Vec<&str> = color_test.split(' ').collect();
         // Grab the first word in that portion
         let color_test = color_test[0];
         if color_test.ends_with("ing") {

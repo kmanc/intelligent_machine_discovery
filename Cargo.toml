@@ -1,13 +1,15 @@
 [package]
 name = "imd"
-version = "1.1.1"
-authors = ["Kevin Conley <kmancxc@gmail.com>"]
+version = "1.2.0"
+authors = ["Kevin Conley <koins@duck.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-termcolor = "1.1"
+clap = ">=3.2.16"
+nix = ">=0.24.2"
+termcolor = ">=1.1"
 
 [profile.release]
 lto = true

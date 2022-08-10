@@ -1,9 +1,10 @@
 mod args;
 mod ping;
+mod utils;
 use std::error::Error;
-use std::fs;
 use std::sync::{Arc, mpsc};
 use std::thread;
+
 
 fn main() {
     // Parse command line arguments and proceed if successful
@@ -12,6 +13,7 @@ fn main() {
         Err(e) => eprintln!("{e}"),
     }
 }
+
 
 fn post_main(args: args::Args) {
     // Create send / receive channels
@@ -52,30 +54,23 @@ fn post_main(args: args::Args) {
     println!("Discovery completed for all target machines");
 }
 
-fn create_dir(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
-    // Report that we are creating the directory
-    let log = imd::format_log(ip_address, "Creating directory to store results in");
-    tx.send(log)?;
-
-    // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
-    if fs::create_dir(ip_address).is_err() {
-        let log = imd::format_log(ip_address, "Directory already exists, skipping");
-        tx.send(log)?;
-    }
-
-    // Change ownership of the directory to the logged in user from Args
-    imd::change_owner(ip_address, user)?;
-
-    Ok(())
-}
 
 fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd::TargetMachine>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
+    /*
     if ping::verify_connection(tx.clone(), &machine.ip_address().to_string()).is_err() {
         return Err(imd::format_log(&machine.ip_address().to_string(), "Target machine could not be reached").into())
     }
+    */
+
+    // If the target machine has an associated hostname, add it to the /etc/hosts file
+    /*
+    if let Some(hostname) = machine.hostname() {
+        utils::add_to_etc_hosts(tx.clone(), hostname, &machine.ip_address().to_string())?;
+    }
+    */    
 
     // Create a landing space for all of the files that results will get written to
-    create_dir(tx.clone(), user.clone(), &machine.ip_address().to_string())?;
+    utils::create_dir(tx.clone(), user.clone(), &machine.ip_address().to_string())?;
     Ok(())
 }

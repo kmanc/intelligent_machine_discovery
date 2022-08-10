@@ -6,11 +6,13 @@ use std::net::IpAddr;
 use std::process::Command;
 use std::sync::Arc;
 
+
 #[derive(Debug)]
 pub struct Args {
     machines: Vec<Arc<imd::TargetMachine>>,
     real_user: Arc<imd::IMDUser>,
 }
+
 
 impl Args {
     pub fn machines(&self) -> &Vec<Arc<imd::TargetMachine>> {
@@ -115,6 +117,7 @@ impl Args {
 
 }
 
+
 #[derive(Clone, Debug)]
 pub enum ArgsError {
     InvalidArgs,
@@ -122,7 +125,9 @@ pub enum ArgsError {
     NotSudo,
 }
 
+
 impl Error for ArgsError {}
+
 
 impl fmt::Display for ArgsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

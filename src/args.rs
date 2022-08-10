@@ -1,6 +1,5 @@
-use nix::unistd::Uid;
+use nix::unistd::{Gid, Uid, User};
 use std::env;
-use std::error::Error;
 use std::net::IpAddr;
 use std::process::Command;
 use std::sync::Arc;
@@ -8,10 +7,14 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct Args {
     machines: Vec<Arc<imd::TargetMachine>>,
-    real_user: Arc<String>,
+    real_user: Arc<imd::IMDUser>,
 }
 
 impl Args {
+    pub fn machines(&self) -> &Vec<Arc<imd::TargetMachine>> {
+        &self.machines
+    }
+
     pub fn parse() -> Result<Args, imd::SetupError> {
         // Set an empty vec for referenced counted target machines
         let mut machines: Vec<Arc<imd::TargetMachine>> = vec![];
@@ -33,8 +36,8 @@ impl Args {
                             machines.push(
                                 Arc::new(
                                     imd::TargetMachine::new(
+                                        None, 
                                         last.unwrap(),
-                                        None
                             )));
                             Some(ip)
                         }
@@ -50,8 +53,8 @@ impl Args {
                             machines.push(
                                 Arc::new(
                                     imd::TargetMachine::new(
-                                        last.unwrap(),
                                         Some(value.to_owned()),
+                                        last.unwrap(),
                             )));
                             None
                         }
@@ -65,8 +68,8 @@ impl Args {
             machines.push(
                 Arc::new(
                     imd::TargetMachine::new(
-                        last.unwrap(),
                         None,
+                        last.unwrap(),
             )))
         }
 
@@ -80,15 +83,32 @@ impl Args {
             return Err(imd::SetupError::NotSudo);
         }
 
-        // Run the who command to determine the user who ran the program (through sudo)
-        let who = String::from_utf8(Command::new("who").output().unwrap().stdout).unwrap();
+        // Run the who command to determine the logged in user (hopefully the person who ran imd)
+        let name = String::from_utf8(Command::new("who").output().unwrap().stdout).unwrap();
         // Parse out the important part
-        let who = String::from(who.split(' ').collect::<Vec<&str>>()[0]);
+        let name = String::from(name.split(' ').collect::<Vec<&str>>()[0]);
+
+        // Get the user ID from the username
+        let (uid, gid) = match User::from_name(&name).unwrap() {
+            Some(user) => (user.uid, user.gid),
+            _ => (Uid::from_raw(0), Gid::from_raw(0))
+        };
+
+        let user = imd::IMDUser::new(
+            gid,
+            name,
+            uid
+        );
 
         // Return the args, which includes the target machines and thelogged in user
         Ok(Args {
-            machines: machines,
-            real_user: Arc::new(who),
+            machines,
+            real_user: Arc::new(user),
         })
     }
+
+    pub fn real_user(&self) -> &Arc<imd::IMDUser> {
+        &self.real_user
+    }
+
 }

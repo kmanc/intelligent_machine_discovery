@@ -1,5 +1,7 @@
 use nix::unistd::{Gid, Uid, User};
 use std::env;
+use std::error::Error;
+use std::fmt;
 use std::net::IpAddr;
 use std::process::Command;
 use std::sync::Arc;
@@ -15,7 +17,7 @@ impl Args {
         &self.machines
     }
 
-    pub fn parse() -> Result<Args, imd::SetupError> {
+    pub fn parse() -> Result<Args, ArgsError> {
         // Set an empty vec for referenced counted target machines
         let mut machines: Vec<Arc<imd::TargetMachine>> = vec![];
         // Set an initial value of None for a look-back on parsing the arguments
@@ -47,7 +49,7 @@ impl Args {
                 Err(_) => {
                     last = match last {
                         // If last is None, that means they entered two non IP addresses in a row, which is not supported
-                        None => return Err(imd::SetupError::InvalidArgs),
+                        None => return Err(ArgsError::InvalidArgs),
                         // If last was something, they entered the hostname to a previously entered IP address, so we should push it
                         _ => {
                             machines.push(
@@ -75,12 +77,12 @@ impl Args {
 
         // imd needs something to target - ensure that's the case here
         if machines.is_empty() {
-            return Err(imd::SetupError::NoArgs);
+            return Err(ArgsError::NoArgs);
         }
 
         // imd must be run as root to work - ensure that's the case here
         if !Uid::effective().is_root() {
-            return Err(imd::SetupError::NotSudo);
+            return Err(ArgsError::NotSudo);
         }
 
         // Run the who command to determine the logged in user (hopefully the person who ran imd)
@@ -111,4 +113,23 @@ impl Args {
         &self.real_user
     }
 
+}
+
+#[derive(Clone, Debug)]
+pub enum ArgsError {
+    InvalidArgs,
+    NoArgs,
+    NotSudo,
+}
+
+impl Error for ArgsError {}
+
+impl fmt::Display for ArgsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidArgs => write!(f, "The provided arguments are invalid. Please run `sudo imd ip_address_1 [hostname_1] [ip_address_2 [hostname_2]]..."),
+            Self::NoArgs => write!(f, "imd needs at least one target. Please run sudo imd ip_address_1 [hostname_1] [ip_address_2 [hostname_2]]..."),
+            Self::NotSudo => write!(f, "imd must be run with root permissions. Please try running 'sudo !!'"),
+        }
+    }
 }

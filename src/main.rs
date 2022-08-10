@@ -1,4 +1,5 @@
 mod args;
+mod ping;
 use std::error::Error;
 use std::fs;
 use std::sync::{Arc, mpsc};
@@ -57,7 +58,7 @@ fn create_dir(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &st
     tx.send(log)?;
 
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
-    if let Err(_) = fs::create_dir(ip_address) {
+    if fs::create_dir(ip_address).is_err() {
         let log = imd::format_log(ip_address, "Directory already exists, skipping");
         tx.send(log)?;
     }
@@ -69,6 +70,11 @@ fn create_dir(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &st
 }
 
 fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd::TargetMachine>) -> Result<(), Box<dyn Error>> {
+    // Make sure that the target machine is reachable
+    if ping::verify_connection(tx.clone(), &machine.ip_address().to_string()).is_err() {
+        return Err(imd::format_log(&machine.ip_address().to_string(), "Target machine could not be reached").into())
+    }
+
     // Create a landing space for all of the files that results will get written to
     create_dir(tx.clone(), user.clone(), &machine.ip_address().to_string())?;
     Ok(())

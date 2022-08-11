@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -47,4 +48,36 @@ pub fn create_dir(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address:
     imd::change_owner(ip_address, user)?;
 
     Ok(())
+}
+
+
+pub fn parse_port_scan(tx: mpsc::Sender<String>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<Arc<String>>>, Box<dyn Error>> {
+    // Report that we are creating the directory
+    let log = imd::format_log(ip_address, "Parsing port scan to determine next steps");
+    tx.send(log)?;
+
+    // Prep the scan string for searching by splitting it to a vector of lines, trimming each line, and removing lines that start with "|" or "SF:"
+    let port_scan: Vec<String> = port_scan.split('\n')
+                                          .map(|s| s.trim().to_string())
+                                          .filter(|s| !s.starts_with('|'))
+                                          .filter(|s| !s.starts_with("SF:"))
+                                          .collect();
+
+    // Define a list of services that we will do something about
+    let services = vec!["http", "ssl/http"];
+
+    // Create a new HashMap to store results in
+    let mut services_map: HashMap<String, Vec<Arc<String>>> = HashMap::new();
+
+    // Iterate over the port scan and find ports that host services we are looking for. Add those service / port pairs to the map
+    for line in port_scan {
+        for service in &services {
+            if line.contains(service) && line.contains("open") {
+                let port = line.split('/').collect::<Vec<&str>>()[0];
+                services_map.entry(service.to_string()).or_default().push(Arc::new(port.to_string()));
+            }
+        }
+    }
+
+    Ok(services_map)
 }

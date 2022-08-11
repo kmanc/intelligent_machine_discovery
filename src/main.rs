@@ -3,6 +3,7 @@ mod drives;
 mod ping;
 mod ports;
 mod utils;
+mod web;
 use std::error::Error;
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -104,15 +105,49 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
     );
 
     // Scan common TCP ports and perform service discovery
-    ports::common_tcp_ports(tx.clone(), user, &machine.ip_address().to_string());
+    let port_scan = ports::common_tcp_ports(tx.clone(), user.clone(), &machine.ip_address().to_string())?;
 
-    // If web server is present, scan for vulnerabilities
+    // Parse the port scan to determine which services are running and where
+    let services = utils::parse_port_scan(tx.clone(), &machine.ip_address().to_string(), &port_scan)?;
+
+    let web_location: Arc<String> = match machine.hostname() {
+        Some(hostname) => Arc::new(hostname.to_string()),
+        None => Arc::new(machine.ip_address().to_string())
+    };
+
+    // If an HTTP web server is present, scan for vulnerabilities, directories, and files
+    for port in services.get("http").unwrap_or(&vec![]) {
+        threads.push(
+            thread::spawn({
+                let tx = tx.clone();
+                let user = user.clone();
+                let ip_address = machine.ip_address().to_string();
+                let port = port.clone();
+                let web_location = web_location.clone();
+                move || {
+                    web::vuln_scan(tx, user, &ip_address, "http", &port, &web_location);
+                }
+            })
+        );
+        threads.push(
+            thread::spawn({
+                let tx = tx.clone();
+                let user = user.clone();
+                let ip_address = machine.ip_address().to_string();
+                let port = port.clone();
+                let web_location = web_location.clone();
+                move || {
+                    web::directory_scan(tx, user, &ip_address, "http", &port, &web_location);
+                }
+            })
+        );
+    }
     //threads.push();
 
-    // If web server is present, scan for directories
-    //threads.push();
-
-    // If web server is present, scan for files
+    // If an HTTPS web server is present, scan for vulnerabilities, directories, and files
+    for port in services.get("ssl/http").unwrap_or(&vec![]) {
+        println!("HTTPS PORT {port}");
+    }
     //threads.push();
 
     // Make sure that all threads have completed before continuing execution

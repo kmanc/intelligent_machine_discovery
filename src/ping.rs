@@ -23,7 +23,7 @@ pub fn verify_connection(tx: mpsc::Sender<String>, ip_address: &str) -> Result<(
     tx.send(log)?;
     
     // Run the ping command and capture the output
-    let args = vec!["-c", "-6", ip_address];
+    let args = vec!["-c", "-4", ip_address];
     let command = imd::get_command_output("ping", args)?;
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {

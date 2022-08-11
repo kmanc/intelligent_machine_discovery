@@ -117,6 +117,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
 
     // If an HTTP web server is present, scan for vulnerabilities, directories, and files
     for port in services.get("http").unwrap_or(&vec![]) {
+        // Spin up a thread for the vuln scan
         threads.push(
             thread::spawn({
                 let tx = tx.clone();
@@ -129,6 +130,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
                 }
             })
         );
+        // Spin up a thread for the web dir and file scanning
         threads.push(
             thread::spawn({
                 let tx = tx.clone();
@@ -137,7 +139,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
                 let port = port.clone();
                 let web_location = web_location.clone();
                 move || {
-                    web::directory_scan(tx, user, &ip_address, "http", &port, &web_location);
+                    web::dir_and_file_scan(tx, user, &ip_address, "http", &port, &web_location);
                 }
             })
         );

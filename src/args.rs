@@ -3,7 +3,6 @@ use std::env;
 use std::error::Error;
 use std::fmt;
 use std::net::IpAddr;
-use std::process::Command;
 use std::sync::Arc;
 
 
@@ -88,7 +87,7 @@ impl Args {
         }
 
         // Run the who command to determine the logged in user (hopefully the person who ran imd)
-        let name = String::from_utf8(Command::new("who").output().unwrap().stdout).unwrap();
+        let name = imd::get_command_output("who", [].to_vec()).unwrap();
         // Parse out the important part
         let name = String::from(name.split(' ').collect::<Vec<&str>>()[0]);
 

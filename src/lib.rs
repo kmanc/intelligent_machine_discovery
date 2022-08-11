@@ -1,6 +1,8 @@
 use nix::unistd::{chown, Gid, Uid};
 use std::error::Error;
+use std::fs::File;
 use std::net::IpAddr;
+use std::process::Command;
 use std::sync::Arc;
 
 
@@ -67,6 +69,26 @@ pub fn change_owner(object: &str, new_owner: Arc<IMDUser>) -> Result<(), Box<dyn
 }
 
 
+pub fn create_file(user: Arc<IMDUser>, filename: &str) -> Result<File, Box<dyn Error>> {
+    // Create the desired file
+    let f = File::create(filename)?;
+
+    // Change ownership of the file to the logged in user from Args
+    change_owner(filename, user)?;
+
+    Ok(f)
+}
+
+
 pub fn format_log(machine: &str, log: &str) -> String {
     format!("{machine: <16}- {log}")
+}
+
+
+pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<dyn Error>> {
+    let out = Command::new(command).args(args)
+                                   .output()?;
+    let out = String::from_utf8(out.stdout)?;
+
+    Ok(out)
 }

@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::fmt;
-use std::process::Command;
 use std::sync::mpsc;
 
 
@@ -24,13 +23,10 @@ pub fn verify_connection(tx: mpsc::Sender<String>, ip_address: &str) -> Result<(
     tx.send(log)?;
     
     // Run the ping command and capture the output
-    let ping = Command::new("ping").arg("-c")
-                                   .arg("8")
-                                   .arg(ip_address)
-                                   .output()?;
-    let ping = String::from_utf8(ping.stdout)?;
+    let args = vec!["-c", "-6", ip_address];
+    let command = imd::get_command_output("ping", args)?;
 
-    if ping.contains("100% packet loss") || ping.contains("100.0% packet loss") {
+    if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
         return Err(Box::new(ConnectionError))
     }
 

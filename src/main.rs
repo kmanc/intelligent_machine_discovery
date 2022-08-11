@@ -1,4 +1,4 @@
-mod args;
+mod conf;
 mod drives;
 mod ping;
 mod ports;
@@ -11,14 +11,14 @@ use std::thread;
 
 fn main() {
     // Parse command line arguments and proceed if successful
-    match args::Args::parse(){
-        Ok(args) => post_main(args),
+    match conf::Conf::parse(){
+        Ok(conf) => post_main(conf),
         Err(e) => eprintln!("{e}"),
     }
 }
 
 
-fn post_main(args: args::Args) {
+fn post_main(conf: conf::Conf) {
     // Create send / receive channels
     let (tx, rx) = mpsc::channel();
 
@@ -26,11 +26,11 @@ fn post_main(args: args::Args) {
     let mut threads = vec![];
 
     // Run the discovery function on each of the target machines in its own thread
-    for machine in args.machines().iter() {
+    for machine in conf.machines().iter() {
         threads.push(
             thread::spawn({
                 let tx = tx.clone();
-                let user = args.real_user().clone();
+                let user = conf.real_user().clone();
                 let machine = machine.clone();
                 move || {
                     if let Err(e) = discovery(tx.clone(), user, machine) {

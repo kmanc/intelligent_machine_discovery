@@ -7,18 +7,18 @@ use std::sync::Arc;
 
 
 #[derive(Debug)]
-pub struct Args {
+pub struct Conf {
     machines: Vec<Arc<imd::TargetMachine>>,
     real_user: Arc<imd::IMDUser>,
 }
 
 
-impl Args {
+impl Conf {
     pub fn machines(&self) -> &Vec<Arc<imd::TargetMachine>> {
         &self.machines
     }
 
-    pub fn parse() -> Result<Args, ArgsError> {
+    pub fn parse() -> Result<Conf, ConfError> {
         // Set an empty vec for referenced counted target machines
         let mut machines: Vec<Arc<imd::TargetMachine>> = vec![];
         // Set an initial value of None for a look-back on parsing the arguments
@@ -50,7 +50,7 @@ impl Args {
                 Err(_) => {
                     last = match last {
                         // If last is None, that means they entered two non IP addresses in a row, which is not supported
-                        None => return Err(ArgsError::InvalidArgs),
+                        None => return Err(ConfError::InvalidArgs),
                         // If last was something, they entered the hostname to a previously entered IP address, so we should push it
                         _ => {
                             machines.push(
@@ -78,12 +78,12 @@ impl Args {
 
         // imd needs something to target - ensure that's the case here
         if machines.is_empty() {
-            return Err(ArgsError::NoArgs);
+            return Err(ConfError::NoArgs);
         }
 
         // imd must be run as root to work - ensure that's the case here
         if !Uid::effective().is_root() {
-            return Err(ArgsError::NotSudo);
+            return Err(ConfError::NotSudo);
         }
 
         // Run the who command to determine the logged in user (hopefully the person who ran imd)
@@ -104,7 +104,7 @@ impl Args {
         );
 
         // Return the args, which includes the target machines and thelogged in user
-        Ok(Args {
+        Ok(Conf {
             machines,
             real_user: Arc::new(user),
         })
@@ -118,17 +118,17 @@ impl Args {
 
 
 #[derive(Clone, Debug)]
-pub enum ArgsError {
+pub enum ConfError {
     InvalidArgs,
     NoArgs,
     NotSudo,
 }
 
 
-impl Error for ArgsError {}
+impl Error for ConfError {}
 
 
-impl fmt::Display for ArgsError {
+impl fmt::Display for ConfError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidArgs => write!(f, "The provided arguments are invalid. Please run `sudo imd ip_address_1 [hostname_1] [ip_address_2 [hostname_2]]..."),

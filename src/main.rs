@@ -142,13 +142,11 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
             })
         );
     }
-    //threads.push();
 
     // If an HTTPS web server is present, scan for vulnerabilities, directories, and files
     for port in services.get("ssl/http").unwrap_or(&vec![]) {
         println!("HTTPS PORT {port}");
     }
-    //threads.push();
 
     // Make sure that all threads have completed before continuing execution
     for thread in threads {

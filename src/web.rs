@@ -14,6 +14,9 @@ pub fn directory_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_addr
     let args = vec!["-q", "-n", "-w", "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt", "-u", &full_location];
     let command = imd::get_command_output("feroxbuster", args)?;
 
+    // For some reason this output has double "\n" at the end of each line, so we fix that
+    let command = command.replace("\n\n", "\n");
+
     // Create a file for the results
     let output_filename = format!("{ip_address}/web_dirs_port_{port}");
     let mut f = imd::create_file(user, &output_filename)?;

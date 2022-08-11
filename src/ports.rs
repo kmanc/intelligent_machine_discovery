@@ -27,7 +27,7 @@ pub fn all_tcp_ports(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_addre
 }
 
 
-pub fn common_tcp_ports(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<String, Box<dyn Error>> {
+pub fn common_tcp_ports(tx: &mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<String, Box<dyn Error>> {
     // Report that we are scanning all TCP ports
     let log = imd::format_log(ip_address, "Scanning common TCP ports for services with 'nmap -sV -Pn --script http-robots.txt --script http-title --script ssl-cert --script ftp-anon'");
     tx.send(log)?;

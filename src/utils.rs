@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::sync::{Arc, mpsc};
 
 
-pub fn add_to_etc_hosts(tx: mpsc::Sender<String>, hostname: &str, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn add_to_etc_hosts(tx: &mpsc::Sender<String>, hostname: &str, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are adding the machine to /etc/hosts
     let log = imd::format_log(ip_address, "Adding to /etc/hosts");
     tx.send(log)?;
@@ -33,7 +33,7 @@ pub fn add_to_etc_hosts(tx: mpsc::Sender<String>, hostname: &str, ip_address: &s
 }
 
 
-pub fn create_dir(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn create_dir(tx: &mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are creating the directory
     let log = imd::format_log(ip_address, "Creating directory to store results in");
     tx.send(log)?;
@@ -51,7 +51,7 @@ pub fn create_dir(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address:
 }
 
 
-pub fn parse_port_scan(tx: mpsc::Sender<String>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<Arc<String>>>, Box<dyn Error>> {
+pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<Arc<String>>>, Box<dyn Error>> {
     // Report that we are creating the directory
     let log = imd::format_log(ip_address, "Parsing port scan to determine next steps");
     tx.send(log)?;

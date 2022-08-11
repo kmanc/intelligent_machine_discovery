@@ -17,7 +17,7 @@ impl fmt::Display for ConnectionError {
 }
 
 
-pub fn verify_connection(tx: mpsc::Sender<String>, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn verify_connection(tx: &mpsc::Sender<String>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are verifying connectivity
     let log = imd::format_log(ip_address, "Verifying connectivity");
     tx.send(log)?;

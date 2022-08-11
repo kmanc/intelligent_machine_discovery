@@ -65,17 +65,17 @@ NOTE - TODO
 */
 fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd::TargetMachine>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    if ping::verify_connection(tx.clone(), &machine.ip_address().to_string()).is_err() {
+    if ping::verify_connection(&tx, &machine.ip_address().to_string()).is_err() {
         return Err(imd::format_log(&machine.ip_address().to_string(), "Target machine could not be reached").into())
     }
 
     // If the target machine has an associated hostname, add it to the /etc/hosts file
     if let Some(hostname) = machine.hostname() {
-        utils::add_to_etc_hosts(tx.clone(), hostname, &machine.ip_address().to_string())?;
+        utils::add_to_etc_hosts(&tx, hostname, &machine.ip_address().to_string())?;
     } 
 
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(tx.clone(), user.clone(), &machine.ip_address().to_string())?;
+    utils::create_dir(&tx, user.clone(), &machine.ip_address().to_string())?;
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
@@ -105,10 +105,10 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
     );
 
     // Scan common TCP ports and perform service discovery
-    let port_scan = ports::common_tcp_ports(tx.clone(), user.clone(), &machine.ip_address().to_string())?;
+    let port_scan = ports::common_tcp_ports(&tx, user.clone(), &machine.ip_address().to_string())?;
 
     // Parse the port scan to determine which services are running and where
-    let services = utils::parse_port_scan(tx.clone(), &machine.ip_address().to_string(), &port_scan)?;
+    let services = utils::parse_port_scan(&tx, &machine.ip_address().to_string(), &port_scan)?;
 
     let web_location: Arc<String> = match machine.hostname() {
         Some(hostname) => Arc::new(hostname.to_string()),

@@ -1,5 +1,5 @@
 # Intelligent Machine Discovery
-[![version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/kmanc/intelligent_machine_discovery/releases/tag/1.2.0)
+[![version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/kmanc/intelligent_machine_discovery/releases/tag/1.2.0)
 [![license](https://img.shields.io/github/license/kmanc/intelligent_machine_discovery?style=flat&color=blueviolet)](https://raw.githubusercontent.com/kmanc/intelligent_machine_discovery/main/LICENSE)
 
 
@@ -10,26 +10,42 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
 
 ## Features
 - organization of all relevant data in a directory for the target machine
-- nmap scan on common ports with service discovery
-- nmap scan on all TCP ports
-- showmount scan for NFS shares
-- threaded where possible to improve runtime
+- Common TCP port scan with service discovery
+- Full TCP port scan
+- Detection of NFS
 - _If applicable_ addition of hostname to /etc/hosts
 - _If applicable_ nikto scan on ports hosting websites
-- _If applicable_ feroxbuster scan for web footprint
+- _If applicable_ feroxbuster scan for ports hosting websites
 
 
 ## Setup
 1. Download the most recent release from the [release page](https://github.com/kmanc/intelligent_machine_discovery/releases/)
-2. Move imd to whichever directory you normally work out of
-3. Give imd execute rights (run `chmod +x imd`)
-4. Make sure you have all [dependencies listed below](#-dependencies)
+2. Give imd execute rights (run `chmod +x imd`)
+3. Move imd to `usr/local/bin`
+4. Ensure that you have the required dependencies:
+    1. [feroxbuster](https://github.com/epi052/feroxbuster) installed
+    2. [nikto](https://cirt.net/Nikto2) installed
+    3. [nmap](https://nmap.org/) installed
+    4. [showmount](https://linux.die.net/man/8/showmount) installed
+    4. [raft-medium-directories.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-directories.txt) file in `/usr/share/wordlists/seclists/`
 
-## How to use
+![setup](https://user-images.githubusercontent.com/14863147/184455461-5726cad6-be82-4cdd-a09d-b818bf33e4f5.gif)
+
+
+## Use
 
 ```
-sudo ./imd <ip_address> [<hostname> [<ip_address> [<hostname]]]
+sudo imd <ip_address> [<hostname> [<ip_address> [<hostname]]]
 ```
+
+![imd](https://user-images.githubusercontent.com/14863147/184455658-29795986-c67f-432f-84bb-967e70f761e7.gif)
+
+
+Once the scans complete, you can look through the output in the resulting folders
+
+
+![output](https://user-images.githubusercontent.com/14863147/184455694-7db66537-bb20-4f92-b52e-d61aa7fe61aa.gif)
+
 
 #### Examples
 
@@ -43,27 +59,3 @@ sudo ./imd 10.10.10.215 10.10.10.216 10.10.10.217
 sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb 10.10.10.218 10.10.10.219
 ```
 
-
-## <a name="dependencies"></a> Dependencies
-In order to get all of the functionality out of IMD you will need a few things on your machine that you may not have already
-- [Nmap](https://nmap.org/)
-- [Nikto](https://cirt.net/Nikto2)
-- [Feroxbuster](https://github.com/epi052/feroxbuster)
-- The [raft-medium-directories.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-directories.txt) file in `/usr/share/wordlists/seclists`
-
-## TODO
-- Bugfixes
-    - As they are found / reported
-- Configurable options
-    - Users can choose how long to let each nikto task to run before stopping it short
-    - Users can choose their favorite web directory scanner (defaults to gobuster)
-    - Users can choose their favorite web file scanner (defaults to wfuzz)
-    - Users can specify their wordlist(s) of choice for web directories and files respectively
-- Stdout reporting
-    - Point out things of interest as they are found
-- "TLDR" output
-    - Basically a quick reference of highlights when all scans are done
-- Code cleanup / best practices / efficiency
-    - Still learning a lot of this stuff so it's not pretty
-- Other
-    - This was a first pass at discovery; there's always more to learn/add

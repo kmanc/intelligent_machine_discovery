@@ -5,7 +5,7 @@ use std::sync::{Arc, mpsc};
 
 pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are scanning for web directories
-    let log = imd::format_log(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"));
+    let log = imd::format_log(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"), None);
     tx.send(log)?;
 
     let full_location = format!("{protocol}://{web_location}:{port}");
@@ -25,7 +25,7 @@ pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_a
     writeln!(f, "{command}")?;
 
     // Report that we completed the web vuln scan
-    let log = imd::format_log(ip_address, &format!("Web port {port} directory and file scan complete"));
+    let log = imd::format_log(ip_address, &format!("Web port {port} directory and file scan complete"), Some(imd::Color::Green));
     tx.send(log)?;
 
     Ok(())
@@ -34,7 +34,7 @@ pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_a
 
 pub fn vuln_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are scanning for web vulnerabilities
-    let log = imd::format_log(ip_address, &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"));
+    let log = imd::format_log(ip_address, &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"), None);
     tx.send(log)?;
 
     let full_location = format!("{protocol}://{web_location}:{port}");
@@ -51,7 +51,7 @@ pub fn vuln_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: 
     writeln!(f, "{command}")?;
 
     // Report that we completed the web vuln scan
-    let log = imd::format_log(ip_address, &format!("Web port {port} vuln scan complete"));
+    let log = imd::format_log(ip_address, &format!("Web port {port} vuln scan complete"), Some(imd::Color::Green));
     tx.send(log)?;
 
     Ok(())

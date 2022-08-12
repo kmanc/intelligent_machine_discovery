@@ -5,7 +5,7 @@ use std::sync::{Arc, mpsc};
 
 pub fn network_drives(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are scanning network drives
-    let log = imd::format_log(ip_address, "Scanning for network drives using 'showmount -e'");
+    let log = imd::format_log(ip_address, "Scanning for network drives using 'showmount -e'", None);
     tx.send(log)?;
 
     // Run the showmount command and capture the output
@@ -20,7 +20,7 @@ pub fn network_drives(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_addr
     writeln!(f, "{command}")?;
 
     // Report that we completed the network drive scan
-    let log = imd::format_log(ip_address, "Network drive scan complete");
+    let log = imd::format_log(ip_address, "Network drive scan complete", Some(imd::Color::Green));
     tx.send(log)?;
 
     Ok(())

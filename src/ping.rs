@@ -19,11 +19,11 @@ impl fmt::Display for ConnectionError {
 
 pub fn verify_connection(tx: &mpsc::Sender<String>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are verifying connectivity
-    let log = imd::format_log(ip_address, "Verifying connectivity");
+    let log = imd::format_log(ip_address, "Verifying connectivity", None);
     tx.send(log)?;
     
     // Run the ping command and capture the output
-    let args = vec!["-c", "-4", ip_address];
+    let args = vec!["-c", "4", ip_address];
     let command = imd::get_command_output("ping", args)?;
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
@@ -31,7 +31,7 @@ pub fn verify_connection(tx: &mpsc::Sender<String>, ip_address: &str) -> Result<
     }
 
     // Report that we were successful in verifying the connection
-    let log = imd::format_log(ip_address, "Connection confirmed");
+    let log = imd::format_log(ip_address, "Connection confirmed", Some(imd::Color::Green));
     tx.send(log)?;
 
     Ok(())

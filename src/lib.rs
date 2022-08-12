@@ -1,9 +1,16 @@
+use crossterm::style::Stylize;
 use nix::unistd::{chown, Gid, Uid};
 use std::error::Error;
 use std::fs::File;
 use std::net::IpAddr;
 use std::process::Command;
 use std::sync::Arc;
+
+
+pub enum Color {
+    Green,
+    Red,
+}
 
 
 pub struct TargetMachine {
@@ -23,8 +30,8 @@ impl TargetMachine {
 
     pub fn new(hostname: Option<String>, ip_address: IpAddr) -> TargetMachine {
         TargetMachine {
-            ip_address,
             hostname,
+            ip_address,
         }
     }
 }
@@ -78,8 +85,12 @@ pub fn create_file(user: Arc<IMDUser>, filename: &str) -> Result<File, Box<dyn E
 }
 
 
-pub fn format_log(machine: &str, log: &str) -> String {
-    format!("{machine: <16}- {log}")
+pub fn format_log(machine: &str, log: &str, color: Option<Color>) -> String {
+    match color {
+        Some(Color::Green) => format!("{machine: <16}- {log}").green().to_string(),
+        None => format!("{machine: <16}- {log}"),
+        Some(Color::Red) => format!("{machine: <16}- {log}").red().to_string(),
+    }
 }
 
 

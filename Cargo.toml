@@ -1,12 +1,13 @@
 [package]
 name = "imd"
-version = "1.2.0"
+version = "1.2.1"
 authors = ["Kevin Conley <koins@duck.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+crossterm = ">=0.25.0"
 nix = ">=0.24.2"
 
 [profile.release]

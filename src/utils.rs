@@ -7,7 +7,7 @@ use std::sync::{Arc, mpsc};
 
 pub fn add_to_etc_hosts(tx: &mpsc::Sender<String>, hostname: &str, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are adding the machine to /etc/hosts
-    let log = imd::format_log(ip_address, "Adding to /etc/hosts");
+    let log = imd::format_log(ip_address, "Adding to /etc/hosts", None);
     tx.send(log)?;
 
     // Open the /etc/hosts files and read it line by line
@@ -17,7 +17,7 @@ pub fn add_to_etc_hosts(tx: &mpsc::Sender<String>, hostname: &str, ip_address: &
         let line = line.unwrap();
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
         if line.contains(ip_address) && line.contains(hostname) {
-            let log = imd::format_log(ip_address, "Entry already in /etc/hosts, skipping");
+            let log = imd::format_log(ip_address, "Entry already in /etc/hosts, skipping", None);
             tx.send(log)?;
             return Ok(())
         }
@@ -35,12 +35,12 @@ pub fn add_to_etc_hosts(tx: &mpsc::Sender<String>, hostname: &str, ip_address: &
 
 pub fn create_dir(tx: &mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are creating the directory
-    let log = imd::format_log(ip_address, "Creating directory to store results in");
+    let log = imd::format_log(ip_address, "Creating directory to store results in", None);
     tx.send(log)?;
 
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
     if fs::create_dir(ip_address).is_err() {
-        let log = imd::format_log(ip_address, "Directory already exists, skipping");
+        let log = imd::format_log(ip_address, "Directory already exists, skipping", None);
         tx.send(log)?;
     }
 
@@ -53,7 +53,7 @@ pub fn create_dir(tx: &mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address
 
 pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<String>>, Box<dyn Error>> {
     // Report that we are creating the directory
-    let log = imd::format_log(ip_address, "Parsing port scan to determine next steps");
+    let log = imd::format_log(ip_address, "Parsing port scan to determine next steps", None);
     tx.send(log)?;
 
     // Prep the scan string for searching by splitting it to a vector of lines, trimming each line, and removing lines that start with "|" or "SF:"

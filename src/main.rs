@@ -4,6 +4,7 @@ mod ping;
 mod ports;
 mod utils;
 mod web;
+use crossterm::style::Stylize;
 use std::error::Error;
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -13,7 +14,7 @@ fn main() {
     // Parse command line arguments and proceed if successful
     match conf::Conf::parse(){
         Ok(conf) => post_main(conf),
-        Err(e) => eprintln!("{e}"),
+        Err(e) => eprintln!("{}", e.to_string().red()),
     }
 }
 
@@ -36,8 +37,9 @@ fn post_main(conf: conf::Conf) {
                 let ip_address = ip_address.clone();
                 let hostname = hostname.clone();
                 move || {
-                    if let Err(e) = discovery(tx.clone(), user, ip_address, hostname) {
-                        tx.send(e.to_string()).unwrap();
+                    if let Err(e) = discovery(tx.clone(), user, ip_address.clone(), hostname) {
+                        let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
+                        tx.send(log).unwrap();
                     }
                 }
             })        
@@ -64,7 +66,7 @@ fn post_main(conf: conf::Conf) {
 fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
     if ping::verify_connection(&tx, &ip_address).is_err() {
-        return Err(imd::format_log(&ip_address, "Target machine could not be reached").into())
+        return Err(imd::format_log(&ip_address, "Target machine could not be reached", Some(imd::Color::Red)).into())
     }
 
     // Create a landing space for all of the files that results will get written to
@@ -81,7 +83,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
             let ip_address = ip_address.clone();
             move || {
                 if let Err(e) =  ports::all_tcp_ports(tx.clone(), user, &ip_address) {
-                    let log = imd::format_log(&ip_address, &e.to_string());
+                    let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
                     tx.send(log).unwrap();
                 }
             }
@@ -96,7 +98,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
             let ip_address = ip_address.clone();
             move || {
                 if let Err(e) = drives::network_drives(tx.clone(), user, &ip_address) {
-                    let log = imd::format_log(&ip_address, &e.to_string());
+                    let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
                     tx.send(log).unwrap();
                 }
             }
@@ -134,7 +136,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
                     let service = service.clone();
                     move || {
                         if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
-                            let log = imd::format_log(&ip_address, &e.to_string());
+                            let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
                             tx.send(log).unwrap();
                         }
                     }
@@ -151,7 +153,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
                     let service = service.clone();
                     move || {
                         if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
-                            let log = imd::format_log(&ip_address, &e.to_string());
+                            let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
                             tx.send(log).unwrap();
                         }
                     }
@@ -166,7 +168,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
     }
 
     // Report that discovery for this machine is done
-    let log = imd::format_log(&ip_address, "Discovery completed");
+    let log = imd::format_log(&ip_address, "Discovery completed", Some(imd::Color::Green));
     tx.send(log)?;
 
     Ok(())

@@ -8,19 +8,19 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Conf {
-    machines: Vec<Arc<imd::TargetMachine>>,
+    machines: Vec<imd::TargetMachine>,
     real_user: Arc<imd::IMDUser>,
 }
 
 
 impl Conf {
-    pub fn machines(&self) -> &Vec<Arc<imd::TargetMachine>> {
+    pub fn machines(&self) -> &Vec<imd::TargetMachine> {
         &self.machines
     }
 
     pub fn parse() -> Result<Conf, ConfError> {
         // Set an empty vec for referenced counted target machines
-        let mut machines: Vec<Arc<imd::TargetMachine>> = vec![];
+        let mut machines: Vec<imd::TargetMachine> = vec![];
         // Set an initial value of None for a look-back on parsing the arguments
         let mut last: Option<IpAddr> = None;
         // Grab user-entered arguments, skip the first (which will be imd), and trim the rest
@@ -37,11 +37,10 @@ impl Conf {
                         // If last is an IP address, the user entered two IP addresses in a row, so we should push last to the vec
                         _ => {
                             machines.push(
-                                Arc::new(
-                                    imd::TargetMachine::new(
-                                        None, 
-                                        last.unwrap(),
-                            )));
+                                imd::TargetMachine::new(
+                                    None, 
+                                    last.unwrap(),
+                            ));
                             Some(ip)
                         }
                     };
@@ -54,11 +53,10 @@ impl Conf {
                         // If last was something, they entered the hostname to a previously entered IP address, so we should push it
                         _ => {
                             machines.push(
-                                Arc::new(
-                                    imd::TargetMachine::new(
-                                        Some(value.to_owned()),
-                                        last.unwrap(),
-                            )));
+                                imd::TargetMachine::new(
+                                    Some(value.to_owned()),
+                                    last.unwrap(),
+                            ));
                             None
                         }
                     };
@@ -69,11 +67,10 @@ impl Conf {
         // If last is not None at the end of the loop, we need to push the last arg because it was an IP address
         if last != None {
             machines.push(
-                Arc::new(
-                    imd::TargetMachine::new(
-                        None,
-                        last.unwrap(),
-            )))
+                imd::TargetMachine::new(
+                    None,
+                    last.unwrap(),
+            ))
         }
 
         // imd needs something to target - ensure that's the case here

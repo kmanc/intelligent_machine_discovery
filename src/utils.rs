@@ -51,7 +51,7 @@ pub fn create_dir(tx: &mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address
 }
 
 
-pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<Arc<String>>>, Box<dyn Error>> {
+pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<String>>, Box<dyn Error>> {
     // Report that we are creating the directory
     let log = imd::format_log(ip_address, "Parsing port scan to determine next steps");
     tx.send(log)?;
@@ -67,14 +67,14 @@ pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &
     let services = vec!["http", "ssl/http"];
 
     // Create a new HashMap to store results in
-    let mut services_map: HashMap<String, Vec<Arc<String>>> = HashMap::new();
+    let mut services_map: HashMap<String, Vec<String>> = HashMap::new();
 
     // Iterate over the port scan and find ports that host services we are looking for. Add those service / port pairs to the map
     for line in port_scan {
         for service in &services {
             if line.contains(service) && line.contains("open") {
                 let port = line.split('/').collect::<Vec<&str>>()[0];
-                services_map.entry(service.to_string()).or_default().push(Arc::new(port.to_string()));
+                services_map.entry(service.to_string()).or_default().push(port.to_string());
             }
         }
     }

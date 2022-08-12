@@ -27,13 +27,16 @@ fn post_main(conf: conf::Conf) {
 
     // Run the discovery function on each of the target machines in its own thread
     for machine in conf.machines().iter() {
+        let ip_address = Arc::new(machine.ip_address().to_string());
+        let hostname = Arc::new(machine.hostname().to_owned());
         threads.push(
             thread::spawn({
                 let tx = tx.clone();
                 let user = conf.real_user().clone();
-                let machine = machine.clone();
+                let ip_address = ip_address.clone();
+                let hostname = hostname.clone();
                 move || {
-                    if let Err(e) = discovery(tx.clone(), user, machine) {
+                    if let Err(e) = discovery(tx.clone(), user, ip_address, hostname) {
                         tx.send(e.to_string()).unwrap();
                     }
                 }
@@ -58,24 +61,14 @@ fn post_main(conf: conf::Conf) {
 }
 
 
-/*
-NOTE - TODO
-DOES DISCOVERY NEED THE MACHINE OR JUST THE IP ADDRESS? ASSESS WHEN DONE
-NOTE - TODO
-*/
-fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd::TargetMachine>) -> Result<(), Box<dyn Error>> {
+fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    if ping::verify_connection(&tx, &machine.ip_address().to_string()).is_err() {
-        return Err(imd::format_log(&machine.ip_address().to_string(), "Target machine could not be reached").into())
+    if ping::verify_connection(&tx, &ip_address).is_err() {
+        return Err(imd::format_log(&ip_address, "Target machine could not be reached").into())
     }
 
-    // If the target machine has an associated hostname, add it to the /etc/hosts file
-    if let Some(hostname) = machine.hostname() {
-        utils::add_to_etc_hosts(&tx, hostname, &machine.ip_address().to_string())?;
-    } 
-
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(&tx, user.clone(), &machine.ip_address().to_string())?;
+    utils::create_dir(&tx, user.clone(), &ip_address)?;
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
@@ -85,9 +78,12 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
         thread::spawn({
             let tx = tx.clone();
             let user = user.clone();
-            let ip_address = machine.ip_address().to_string();
+            let ip_address = ip_address.clone();
             move || {
-                ports::all_tcp_ports(tx, user, &ip_address);
+                if let Err(e) =  ports::all_tcp_ports(tx.clone(), user, &ip_address) {
+                    let log = imd::format_log(&ip_address, &e.to_string());
+                    tx.send(log).unwrap();
+                }
             }
         })
     );
@@ -97,22 +93,31 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
         thread::spawn({
             let tx = tx.clone();
             let user = user.clone();
-            let ip_address = machine.ip_address().to_string();
+            let ip_address = ip_address.clone();
             move || {
-                drives::network_drives(tx, user, &ip_address);
+                if let Err(e) = drives::network_drives(tx.clone(), user, &ip_address) {
+                    let log = imd::format_log(&ip_address, &e.to_string());
+                    tx.send(log).unwrap();
+                }
             }
         })
     );
 
     // Scan common TCP ports and perform service discovery
-    let port_scan = ports::common_tcp_ports(&tx, user.clone(), &machine.ip_address().to_string())?;
+    let port_scan = ports::common_tcp_ports(&tx, user.clone(), &ip_address)?;
 
     // Parse the port scan to determine which services are running and where
-    let services = utils::parse_port_scan(&tx, &machine.ip_address().to_string(), &port_scan)?;
+    let services = utils::parse_port_scan(&tx, &ip_address, &port_scan)?;
+    let services = Arc::new(services);
 
-    let web_location: Arc<String> = match machine.hostname() {
-        Some(hostname) => Arc::new(hostname.to_string()),
-        None => Arc::new(machine.ip_address().to_string())
+    // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable). Otherwise use the IP address
+    let web_location: Arc<String> = match &*hostname {
+        Some(hostname) => {
+            let hostname = Arc::new(hostname.to_string());
+            utils::add_to_etc_hosts(&tx, &hostname, &ip_address).unwrap();
+            hostname
+        },
+        None => ip_address.clone(),
     };
 
     // If an HTTP web server is present, scan for vulnerabilities, directories, and files
@@ -122,11 +127,14 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
             thread::spawn({
                 let tx = tx.clone();
                 let user = user.clone();
-                let ip_address = machine.ip_address().to_string();
+                let ip_address = ip_address.clone();
                 let port = port.clone();
                 let web_location = web_location.clone();
                 move || {
-                    web::vuln_scan(tx, user, &ip_address, "http", &port, &web_location);
+                    if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, "http", &port, &web_location) {
+                        let log = imd::format_log(&ip_address, &e.to_string());
+                        tx.send(log).unwrap();
+                    }
                 }
             })
         );
@@ -135,11 +143,14 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
             thread::spawn({
                 let tx = tx.clone();
                 let user = user.clone();
-                let ip_address = machine.ip_address().to_string();
+                let ip_address = ip_address.clone();
                 let port = port.clone();
                 let web_location = web_location.clone();
                 move || {
-                    web::dir_and_file_scan(tx, user, &ip_address, "http", &port, &web_location);
+                    if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, "http", &port, &web_location) {
+                        let log = imd::format_log(&ip_address, &e.to_string());
+                        tx.send(log).unwrap();
+                    }
                 }
             })
         );
@@ -147,7 +158,38 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
 
     // If an HTTPS web server is present, scan for vulnerabilities, directories, and files
     for port in services.get("ssl/http").unwrap_or(&vec![]) {
-        println!("HTTPS PORT {port}");
+        // Spin up a thread for the vuln scan
+        threads.push(
+            thread::spawn({
+                let tx = tx.clone();
+                let user = user.clone();
+                let ip_address = ip_address.clone();
+                let port = port.clone();
+                let web_location = web_location.clone();
+                move || {
+                    if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, "http", &port, &web_location) {
+                        let log = imd::format_log(&ip_address, &e.to_string());
+                        tx.send(log).unwrap();
+                    }
+                }
+            })
+        );
+        // Spin up a thread for the web dir and file scanning
+        threads.push(
+            thread::spawn({
+                let tx = tx.clone();
+                let user = user.clone();
+                let ip_address = ip_address.clone();
+                let port = port.clone();
+                let web_location = web_location.clone();
+                move || {
+                    if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, "https", &port, &web_location) {
+                        let log = imd::format_log(&ip_address, &e.to_string());
+                        tx.send(log).unwrap();
+                    }
+                }
+            })
+        );
     }
 
     // Make sure that all threads have completed before continuing execution
@@ -156,7 +198,7 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, machine: Arc<imd
     }
 
     // Report that discovery for this machine is done
-    let log = imd::format_log(&machine.ip_address().to_string(), "Discovery completed");
+    let log = imd::format_log(&ip_address, "Discovery completed");
     tx.send(log)?;
 
     Ok(())

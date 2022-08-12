@@ -1,6 +1,6 @@
 [package]
 name = "imd"
-version = "1.2.0"
+version = "1.2.1"
 authors = ["Kevin Conley <koins@duck.com>"]
 edition = "2021"
 

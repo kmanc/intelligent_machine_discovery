@@ -14,7 +14,7 @@ fn main() {
     // Parse command line arguments and proceed if successful
     match conf::Conf::parse(){
         Ok(conf) => post_main(conf),
-        Err(e) => eprintln!("{}", e.to_string().red()),
+        Err(e) => println!("{}", e.to_string().red()),
     }
 }
 

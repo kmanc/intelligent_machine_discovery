@@ -1,107 +1,173 @@
-/*
- Author: Kevin Conley <kmancxc@gmail.com>
- GitHub: https://github.com/kmanc/
-*/
-
-use imd::Config;
-use std::env;
-use std::io::Write;
-use std::process;
+mod conf;
+mod drives;
+mod ping;
+mod ports;
+mod utils;
+mod web;
+use std::error::Error;
 use std::sync::{Arc, mpsc};
 use std::thread;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 
 fn main() {
-    // Create send/receive channels
+    // Parse command line arguments and proceed if successful
+    match conf::Conf::parse(){
+        Ok(conf) => post_main(conf),
+        Err(e) => eprintln!("{e}"),
+    }
+}
+
+
+fn post_main(conf: conf::Conf) {
+    // Create send / receive channels
     let (tx, rx) = mpsc::channel();
 
-    // Check to see if the user was sudo - if we got an error, alert the user and exit
-    if let Err(e) = imd::sudo_check() { 
-        tx.send(e.to_string()).unwrap()
-    }
-
-    // Collect the command line args
-    let args: Vec<String> = env::args().collect();
-    // Get the user entered IP address(es) and optionally hostname(s)
-    let config = match Config::new(&args) {
-        Ok(config) => config,
-        Err(e) => {
-            tx.send(e.to_string()).unwrap();
-            Config::new(&["FakeCommand".to_string(), "0.0.0.0".to_string()]).unwrap()
-        }
-    };
-
-    let username = config.username();
-    let username = Arc::new(username.to_owned());
+    // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
 
-    for target_machine in config.targets().iter().cloned() {
-        threads.push(thread::spawn({
+    // Run the discovery function on each of the target machines in its own thread
+    for machine in conf.machines().iter() {
+        let ip_address = Arc::new(machine.ip_address().to_string());
+        let hostname = Arc::new(machine.hostname().to_owned());
+        threads.push(
+            thread::spawn({
+                let tx = tx.clone();
+                let user = conf.real_user().clone();
+                let ip_address = ip_address.clone();
+                let hostname = hostname.clone();
+                move || {
+                    if let Err(e) = discovery(tx.clone(), user, ip_address, hostname) {
+                        tx.send(e.to_string()).unwrap();
+                    }
+                }
+            })        
+        );
+    }
+
+    // Drop the main function's transmitter or execution will never stop
+    drop(tx);
+
+    // Handle the receive channel messages
+    for received in rx {
+        println!("{received}");
+    }
+
+    // Make sure that all threads have completed before continuing execution
+    for thread in threads {
+        thread.join().unwrap();
+    }
+
+    println!("Discovery completed for all target machines");
+}
+
+
+fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>) -> Result<(), Box<dyn Error>> {
+    // Make sure that the target machine is reachable
+    if ping::verify_connection(&tx, &ip_address).is_err() {
+        return Err(imd::format_log(&ip_address, "Target machine could not be reached").into())
+    }
+
+    // Create a landing space for all of the files that results will get written to
+    utils::create_dir(&tx, user.clone(), &ip_address)?;
+
+    // Create a vector for threads. Each will be responsible a sub-task run against the target machine
+    let mut threads = vec![];
+
+    // Scan all TCP ports on the machine
+    threads.push(
+        thread::spawn({
             let tx = tx.clone();
-            let username = Arc::clone(&username);
+            let user = user.clone();
+            let ip_address = ip_address.clone();
             move || {
-                if let Err(e) = imd::target_discovery(target_machine, username, tx.clone()) {
-                    tx.send(e.to_string()).unwrap();
+                if let Err(e) =  ports::all_tcp_ports(tx.clone(), user, &ip_address) {
+                    let log = imd::format_log(&ip_address, &e.to_string());
+                    tx.send(log).unwrap();
                 }
             }
-        }));
+        })
+    );
+
+    // Scan NFS server on the machine
+    threads.push(
+        thread::spawn({
+            let tx = tx.clone();
+            let user = user.clone();
+            let ip_address = ip_address.clone();
+            move || {
+                if let Err(e) = drives::network_drives(tx.clone(), user, &ip_address) {
+                    let log = imd::format_log(&ip_address, &e.to_string());
+                    tx.send(log).unwrap();
+                }
+            }
+        })
+    );
+
+    // Scan common TCP ports and perform service discovery
+    let port_scan = ports::common_tcp_ports(&tx, user.clone(), &ip_address)?;
+
+    // Parse the port scan to determine which services are running and where
+    let services = utils::parse_port_scan(&tx, &ip_address, &port_scan)?;
+    let services = Arc::new(services);
+
+    // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable). Otherwise use the IP address
+    let web_location: Arc<String> = match &*hostname {
+        Some(hostname) => {
+            let hostname = Arc::new(hostname.to_string());
+            utils::add_to_etc_hosts(&tx, &hostname, &ip_address).unwrap();
+            hostname
+        },
+        None => ip_address.clone(),
+    };
+
+    // For now we are only parsing web servers, so scan them for vulnerabilities, directories, and files
+    for (service, ports) in services.iter() {
+        for port in ports {
+            // Spin up a thread for the vuln scan
+            threads.push(
+                thread::spawn({
+                    let tx = tx.clone();
+                    let user = user.clone();
+                    let ip_address = ip_address.clone();
+                    let port = port.clone();
+                    let web_location = web_location.clone();
+                    let service = service.clone();
+                    move || {
+                        if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
+                            let log = imd::format_log(&ip_address, &e.to_string());
+                            tx.send(log).unwrap();
+                        }
+                    }
+                })
+            );
+            // Spin up a thread for the web dir and file scanning
+            threads.push(
+                thread::spawn({
+                    let tx = tx.clone();
+                    let user = user.clone();
+                    let ip_address = ip_address.clone();
+                    let port = port.clone();
+                    let web_location = web_location.clone();
+                    let service = service.clone();
+                    move || {
+                        if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
+                            let log = imd::format_log(&ip_address, &e.to_string());
+                            tx.send(log).unwrap();
+                        }
+                    }
+                })
+            );
+        }
     }
 
-    // Drop the main thread's transmitter or execution will hang at runtime
-	drop(tx);
-    // Set up stdout for colorized printing
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut stderr = StandardStream::stderr(ColorChoice::Always);
-
-    // Capture the messages sent across the channel
-    for received in rx {
-        // Split on space dash space
-        let color_test: Vec<&str> = received.split(" - ").collect();
-        // Check to see if this is a fatal error
-        if color_test[0] == ("Fatal") {
-            // Set stderr to Red
-            stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
-            // Gracefully tear down after printing fatal error
-            writeln!(&mut stderr, "{}", received).unwrap();
-            stderr.reset().ok();
-            process::exit(1);
-        }
-        // Check to see if it is a non-fatal error (one that I didn't create)
-        if color_test.len() == 1 {
-            // Stderr --> Red
-            stderr.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 0, 0)))).ok();
-            // Most common error isn't super helpful
-            let received = match &*received {
-                "No such file or directory (os error 2)" => format!("{} - check README dependencies for more info", received),
-                _ => received
-            };
-            // Write to stderr, not stdout
-            writeln!(&mut stderr, "{}", received).unwrap();
-            // Skip to the next message
-            continue
-        }
-        // Since it isn't fatal, continue processing by grabbing the next portion
-        let color_test = color_test[1];
-        let color_test: Vec<&str> = color_test.split(' ').collect();
-        // Grab the first word in that portion
-        let color_test = color_test[0];
-        if color_test.ends_with("ing") {
-            // Stdout --> Yellow
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(255, 255, 0)))).ok();
-        } else if color_test.ends_with("ed") {
-            // Stdout --> Green
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(0, 204, 0)))).ok();
-        }
-        writeln!(&mut stdout, "{}", received).unwrap();
+    // Make sure that all threads have completed before continuing execution
+    for thread in threads {
+        thread.join().unwrap();
     }
 
-    for t in threads {
-        t.join().unwrap();
-    }
+    // Report that discovery for this machine is done
+    let log = imd::format_log(&ip_address, "Discovery completed");
+    tx.send(log)?;
 
-    // Reset the terminal color
-    stdout.reset().ok();
-    stderr.reset().ok();
-    println!("All machine scans complete");
+    Ok(())
 }

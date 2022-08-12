@@ -7,6 +7,3 @@ target/release/*
 main
 target/CACHEDIR.TAG
 target/.*
-
-# Exceptions
-!target/release/imd

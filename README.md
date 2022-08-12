@@ -1,6 +1,6 @@
 # Intelligent Machine Discovery
-[![version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/kmanc/intelligent_machine_discovery/releases/tag/1.1.0)
-[![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.txt)
+[![version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/kmanc/intelligent_machine_discovery/releases/tag/1.2.0)
+[![license](https://img.shields.io/github/license/kmanc/intelligent_machine_discovery?style=flat&color=blueviolet)](https://raw.githubusercontent.com/kmanc/intelligent_machine_discovery/main/LICENSE)
 
 
 ## Intro
@@ -16,9 +16,7 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
 - threaded where possible to improve runtime
 - _If applicable_ addition of hostname to /etc/hosts
 - _If applicable_ nikto scan on ports hosting websites
-- _If applicable_ gobuster directory scan on ports hosting websites
-- _If applicable_ wfuzz file scan on all directories found on ports hosting websites
-- _If applicable_ check for anonymous FTP login
+- _If applicable_ feroxbuster scan for web footprint
 
 
 ## Setup
@@ -50,12 +48,8 @@ sudo ./imd 10.10.10.215 academy.htb 10.10.10.216 10.10.10.217 cereal.htb 10.10.1
 In order to get all of the functionality out of IMD you will need a few things on your machine that you may not have already
 - [Nmap](https://nmap.org/)
 - [Nikto](https://cirt.net/Nikto2)
-- [Gobuster](https://github.com/OJ/gobuster)
-- [Wfuzz](https://github.com/xmendez/wfuzz)
-- The following files (in the following places)
-    - [/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt](https://github.com/daviddias/node-dirbuster/blob/master/lists/directory-list-2.3-small.txt)
-    - [/usr/share/wordlists/seclists/raft-medium-files.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-files.txt)
-
+- [Feroxbuster](https://github.com/epi052/feroxbuster)
+- The [raft-medium-directories.txt](https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/raft-medium-directories.txt) file in `/usr/share/wordlists/seclists`
 
 ## TODO
 - Bugfixes

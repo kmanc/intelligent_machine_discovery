@@ -12,7 +12,7 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
 - organization of all relevant data in a directory for the target machine
 - Common TCP port scan with service discovery
 - Full TCP port scan
-- Detection of NFS
+- Detection of NFS shares
 - _If applicable_ addition of hostname to /etc/hosts
 - _If applicable_ nikto scan on ports hosting websites
 - _If applicable_ feroxbuster scan for ports hosting websites

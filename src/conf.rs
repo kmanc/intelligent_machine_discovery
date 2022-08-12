@@ -6,7 +6,6 @@ use std::net::IpAddr;
 use std::sync::Arc;
 
 
-#[derive(Debug)]
 pub struct Conf {
     machines: Vec<imd::TargetMachine>,
     real_user: Arc<imd::IMDUser>,
@@ -114,7 +113,7 @@ impl Conf {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ConfError {
     InvalidArgs,
     NoArgs,

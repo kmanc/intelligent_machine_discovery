@@ -74,6 +74,10 @@ pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &
         for service in &services {
             if line.contains(service) && line.contains("open") {
                 let port = line.split('/').collect::<Vec<&str>>()[0];
+                let service = match service {
+                    &"ssl/http" => "https",
+                    _ => service,
+                };
                 services_map.entry(service.to_string()).or_default().push(port.to_string());
             }
         }

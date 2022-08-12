@@ -6,7 +6,6 @@ use std::process::Command;
 use std::sync::Arc;
 
 
-#[derive(Clone, Debug)]
 pub struct TargetMachine {
     hostname: Option<String>, 
     ip_address: IpAddr,
@@ -31,7 +30,6 @@ impl TargetMachine {
 }
 
 
-#[derive(Clone, Debug)]
 pub struct IMDUser {
     gid: Gid,
     name: String,

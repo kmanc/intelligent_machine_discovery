@@ -120,76 +120,44 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
         None => ip_address.clone(),
     };
 
-    // If an HTTP web server is present, scan for vulnerabilities, directories, and files
-    for port in services.get("http").unwrap_or(&vec![]) {
-        // Spin up a thread for the vuln scan
-        threads.push(
-            thread::spawn({
-                let tx = tx.clone();
-                let user = user.clone();
-                let ip_address = ip_address.clone();
-                let port = port.clone();
-                let web_location = web_location.clone();
-                move || {
-                    if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, "http", &port, &web_location) {
-                        let log = imd::format_log(&ip_address, &e.to_string());
-                        tx.send(log).unwrap();
+    // For now we are only parsing web servers, so scan them for vulnerabilities, directories, and files
+    for (service, ports) in services.iter() {
+        for port in ports {
+            // Spin up a thread for the vuln scan
+            threads.push(
+                thread::spawn({
+                    let tx = tx.clone();
+                    let user = user.clone();
+                    let ip_address = ip_address.clone();
+                    let port = port.clone();
+                    let web_location = web_location.clone();
+                    let service = service.clone();
+                    move || {
+                        if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
+                            let log = imd::format_log(&ip_address, &e.to_string());
+                            tx.send(log).unwrap();
+                        }
                     }
-                }
-            })
-        );
-        // Spin up a thread for the web dir and file scanning
-        threads.push(
-            thread::spawn({
-                let tx = tx.clone();
-                let user = user.clone();
-                let ip_address = ip_address.clone();
-                let port = port.clone();
-                let web_location = web_location.clone();
-                move || {
-                    if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, "http", &port, &web_location) {
-                        let log = imd::format_log(&ip_address, &e.to_string());
-                        tx.send(log).unwrap();
+                })
+            );
+            // Spin up a thread for the web dir and file scanning
+            threads.push(
+                thread::spawn({
+                    let tx = tx.clone();
+                    let user = user.clone();
+                    let ip_address = ip_address.clone();
+                    let port = port.clone();
+                    let web_location = web_location.clone();
+                    let service = service.clone();
+                    move || {
+                        if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
+                            let log = imd::format_log(&ip_address, &e.to_string());
+                            tx.send(log).unwrap();
+                        }
                     }
-                }
-            })
-        );
-    }
-
-    // If an HTTPS web server is present, scan for vulnerabilities, directories, and files
-    for port in services.get("ssl/http").unwrap_or(&vec![]) {
-        // Spin up a thread for the vuln scan
-        threads.push(
-            thread::spawn({
-                let tx = tx.clone();
-                let user = user.clone();
-                let ip_address = ip_address.clone();
-                let port = port.clone();
-                let web_location = web_location.clone();
-                move || {
-                    if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, "http", &port, &web_location) {
-                        let log = imd::format_log(&ip_address, &e.to_string());
-                        tx.send(log).unwrap();
-                    }
-                }
-            })
-        );
-        // Spin up a thread for the web dir and file scanning
-        threads.push(
-            thread::spawn({
-                let tx = tx.clone();
-                let user = user.clone();
-                let ip_address = ip_address.clone();
-                let port = port.clone();
-                let web_location = web_location.clone();
-                move || {
-                    if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, "https", &port, &web_location) {
-                        let log = imd::format_log(&ip_address, &e.to_string());
-                        tx.send(log).unwrap();
-                    }
-                }
-            })
-        );
+                })
+            );
+        }
     }
 
     // Make sure that all threads have completed before continuing execution

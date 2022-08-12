@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::mpsc;
 
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct ConnectionError;
 
 

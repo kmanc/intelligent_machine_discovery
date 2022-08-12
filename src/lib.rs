@@ -30,8 +30,8 @@ impl TargetMachine {
 
     pub fn new(hostname: Option<String>, ip_address: IpAddr) -> TargetMachine {
         TargetMachine {
-            ip_address,
             hostname,
+            ip_address,
         }
     }
 }

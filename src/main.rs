@@ -66,7 +66,7 @@ fn post_main(conf: conf::Conf) {
 fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
     if ping::verify_connection(&tx, &ip_address).is_err() {
-        return Err(imd::format_log(&ip_address, "Target machine could not be reached", Some(imd::Color::Red)).into())
+        return Err("Machine could not be reached".into())
     }
 
     // Create a landing space for all of the files that results will get written to
@@ -83,7 +83,8 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
             let ip_address = ip_address.clone();
             move || {
                 if let Err(e) =  ports::all_tcp_ports(tx.clone(), user, &ip_address) {
-                    let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
+                    let error_context = format!("Error running full TCP port scan: '{e}'");
+                    let log = imd::format_log(&ip_address, &error_context, Some(imd::Color::Red));
                     tx.send(log).unwrap();
                 }
             }
@@ -98,7 +99,8 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
             let ip_address = ip_address.clone();
             move || {
                 if let Err(e) = drives::network_drives(tx.clone(), user, &ip_address) {
-                    let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
+                    let error_context = format!("Error running network drive scan: '{e}'");
+                    let log = imd::format_log(&ip_address, &error_context, Some(imd::Color::Red));
                     tx.send(log).unwrap();
                 }
             }
@@ -106,7 +108,12 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
     );
 
     // Scan common TCP ports and perform service discovery
-    let port_scan = ports::common_tcp_ports(&tx, user.clone(), &ip_address)?;
+    let port_scan = match ports::common_tcp_ports(&tx, user.clone(), &ip_address) {
+        Ok(port_scan) => port_scan,
+        Err(e) => {
+            return Err(format!("Error running common TCP port scan: '{e}'").into())
+        },
+    };
 
     // Parse the port scan to determine which services are running and where
     let services = utils::parse_port_scan(&tx, &ip_address, &port_scan)?;
@@ -136,7 +143,8 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
                     let service = service.clone();
                     move || {
                         if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
-                            let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
+                            let error_context = format!("Error running web vuln scan: '{e}'");
+                            let log = imd::format_log(&ip_address, &error_context, Some(imd::Color::Red));
                             tx.send(log).unwrap();
                         }
                     }
@@ -153,7 +161,8 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
                     let service = service.clone();
                     move || {
                         if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
-                            let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
+                            let error_context = format!("Error running web dir and file scan: '{e}'");
+                            let log = imd::format_log(&ip_address, &error_context, Some(imd::Color::Red));
                             tx.send(log).unwrap();
                         }
                     }

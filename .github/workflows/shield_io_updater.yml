@@ -18,7 +18,7 @@ jobs:
     - uses: dante-signal31/rust-app-version@v1.0.0
       id: imd_ver
       with:
-        cargo_toml_folder: "/"
+        cargo_toml_folder: "."
     - name: Update imd version
       uses: jossef/action-set-json-field@v2
       with:

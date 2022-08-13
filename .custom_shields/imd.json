@@ -1,6 +1,6 @@
 {
-    "schemaVersion": 1,
-    "label": "imd",
-    "message": "1.0.0",
-    "color": "blue"
+  "schemaVersion": 1,
+  "label": "imd",
+  "message": "No Cargo.toml file found at provided path: /Cargo.toml",
+  "color": "blue"
 }

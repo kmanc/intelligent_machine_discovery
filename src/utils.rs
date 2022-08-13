@@ -14,7 +14,7 @@ pub fn add_to_etc_hosts(tx: &mpsc::Sender<String>, hostname: &str, ip_address: &
     let host_file = File::open("/etc/hosts")?;
     let reader = BufReader::new(host_file);
     for line in reader.lines() {
-        let line = line.unwrap();
+        let line = line?;
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
         if line.contains(ip_address) && line.contains(hostname) {
             let log = imd::format_log(ip_address, "Entry already in /etc/hosts, skipping", None);
@@ -24,8 +24,9 @@ pub fn add_to_etc_hosts(tx: &mpsc::Sender<String>, hostname: &str, ip_address: &
     }
 
     // If we didn't already return, add the entry to the /etc/hosts file because it wasn't there
-    let host_file = OpenOptions::new().append(true)
-                                      .open("/etc/hosts")?;
+    let host_file = OpenOptions::new()
+        .append(true)
+        .open("/etc/hosts")?;
 
     writeln!(&host_file, "{} {}", ip_address, hostname)?;
 
@@ -57,11 +58,12 @@ pub fn parse_port_scan(tx: &mpsc::Sender<String>, ip_address: &str, port_scan: &
     tx.send(log)?;
 
     // Prep the scan string for searching by splitting it to a vector of lines, trimming each line, and removing lines that start with "|" or "SF:"
-    let port_scan: Vec<String> = port_scan.split('\n')
-                                          .map(|s| s.trim().to_string())
-                                          .filter(|s| !s.starts_with('|'))
-                                          .filter(|s| !s.starts_with("SF:"))
-                                          .collect();
+    let port_scan: Vec<String> = port_scan
+        .split('\n')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.starts_with('|'))
+        .filter(|s| !s.starts_with("SF:"))
+        .collect();
 
     // Define a list of services that we will do something about
     let services = vec!["http", "ssl/http"];

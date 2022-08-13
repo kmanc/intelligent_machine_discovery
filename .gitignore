@@ -1,9 +1,5 @@
 # Dirs
-target/debug/*
-target/release/*
+target/
 .idea/
 
 # Files
-main
-target/CACHEDIR.TAG
-target/.*

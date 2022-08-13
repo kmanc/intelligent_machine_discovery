@@ -3,7 +3,7 @@ use std::io::Write;
 use std::sync::{Arc, mpsc};
 
 
-pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str) -> Result<(), Box<dyn Error>> {
+pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, wordlist: &str) -> Result<(), Box<dyn Error>> {
     // Report that we are scanning for web directories
     let log = imd::format_log(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"), None);
     tx.send(log)?;
@@ -11,7 +11,7 @@ pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_a
     let full_location = format!("{protocol}://{web_location}:{port}");
 
     // Run the vuln scan and capture the output
-    let args = vec!["-q", "--thorough", "-w", "/usr/share/wordlists/seclists/raft-medium-directories.txt", "-u", &full_location];
+    let args = vec!["-q", "--thorough", "-w", wordlist, "-u", &full_location];
     let command = imd::get_command_output("feroxbuster", args)?;
 
     // For some reason this output has double "\n" at the end of each line, so we fix that

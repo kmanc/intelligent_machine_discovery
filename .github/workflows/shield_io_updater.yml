@@ -25,6 +25,6 @@ jobs:
         file: ".custom_shields/imd.json"
         field: message
         value: ${{ steps.imd_ver.outputs.app_version }}
-    - uses: stefanweifel/git-auto-commit-action@v4.14.1
+    - uses: stefanzweifel/git-auto-commit-action@v4.14.1
       with:
         commit_message: "Update imd badge data via Github Action"

@@ -11,18 +11,18 @@ use std::thread;
 
 
 fn main() {
+    // Create send & receive channels
+    let (tx, rx) = mpsc::channel();
+
     // Parse command line arguments and proceed if successful
-    match conf::Conf::init(){
-        Ok(conf) => post_main(conf),
+    match conf::Conf::init(tx.clone()){
+        Ok(conf) => post_main(tx, rx, conf),
         Err(e) => println!("{}", e.to_string().red()),
     }
 }
 
 
-fn post_main(conf: conf::Conf) {
-    // Create send / receive channels
-    let (tx, rx) = mpsc::channel();
-
+fn post_main(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>, conf: conf::Conf) {
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
 
@@ -36,8 +36,9 @@ fn post_main(conf: conf::Conf) {
                 let ip_address = ip_address.clone();
                 let tx = tx.clone();
                 let user = conf.real_user().clone();
+                let wordlist = conf.wordlist().clone();
                 move || {
-                    if let Err(e) = discovery(tx.clone(), user, ip_address.clone(), hostname) {
+                    if let Err(e) = discovery(tx.clone(), user, ip_address.clone(), hostname, wordlist) {
                         let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
                         tx.send(log).unwrap();
                     }
@@ -55,6 +56,7 @@ fn post_main(conf: conf::Conf) {
     }
 
     // Make sure that all threads have completed before continuing execution
+    // I _think_ this is already the case by the time the code gets here because otherwise our receiver loop would be running, but just in case
     for thread in threads {
         thread.join().unwrap();
     }
@@ -63,11 +65,22 @@ fn post_main(conf: conf::Conf) {
 }
 
 
-fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>) -> Result<(), Box<dyn Error>> {
+fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>, wordlist: Arc<String>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
     if ping::verify_connection(&tx, &ip_address).is_err() {
         return Err("Machine could not be reached".into())
     }
+
+    // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable)
+    // Otherwise skip the /etc/hosts file and use the IP address for web scans
+    let web_location: Arc<String> = match &*hostname {
+        Some(hostname) => {
+            let hostname = Arc::new(hostname.to_string());
+            utils::add_to_etc_hosts(&tx, &hostname, &ip_address).unwrap();
+            hostname
+        },
+        None => ip_address.clone(),
+    };
 
     // Create a landing space for all of the files that results will get written to
     utils::create_dir(&tx, user.clone(), &ip_address)?;
@@ -119,16 +132,6 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
     let services = utils::parse_port_scan(&tx, &ip_address, &port_scan)?;
     let services = Arc::new(services);
 
-    // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable). Otherwise use the IP address
-    let web_location: Arc<String> = match &*hostname {
-        Some(hostname) => {
-            let hostname = Arc::new(hostname.to_string());
-            utils::add_to_etc_hosts(&tx, &hostname, &ip_address).unwrap();
-            hostname
-        },
-        None => ip_address.clone(),
-    };
-
     // For now we are only parsing web servers, so scan them for vulnerabilities, directories, and files
     for (service, ports) in services.iter() {
         for port in ports {
@@ -159,8 +162,9 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
                     let tx = tx.clone();
                     let user = user.clone();
                     let web_location = web_location.clone();
+                    let wordlist = wordlist.clone();
                     move || {
-                        if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
+                        if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location, &wordlist) {
                             let error_context = format!("Error running web dir and file scan: '{e}'");
                             let log = imd::format_log(&ip_address, &error_context, Some(imd::Color::Red));
                             tx.send(log).unwrap();

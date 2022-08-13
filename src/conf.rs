@@ -3,8 +3,9 @@ use nix::unistd::{Gid, Uid, User};
 use std::env;
 use std::error::Error;
 use std::fmt;
+use std::iter::zip;
 use std::net::IpAddr;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 
 pub struct Conf {
@@ -15,7 +16,7 @@ pub struct Conf {
 
 
 impl Conf {
-    pub fn init() -> Result<Conf, NotSudo> {
+    pub fn init(tx: mpsc::Sender<String>) -> Result<Conf, NotSudo> {
         // Set up the command line arguments and their associated settings
         let app = cli();
 
@@ -27,6 +28,9 @@ impl Conf {
             return Err(NotSudo);
         }
 
+        // Set an empty vec for target machines
+        let mut machines: Vec<imd::TargetMachine> = vec![];
+
         // Get the target machines parsed as IP addresses
         let ip_addresses: Vec<_> = matches.get_many::<String>("targets")
             .unwrap()
@@ -34,15 +38,33 @@ impl Conf {
             .collect();
 
         // Get the target names, or an empty vector if None
-        let names: Vec<_> = match matches.get_many::<String>("names") {
+        let mut names: Vec<_> = match matches.get_many::<String>("names") {
             None => vec![],
-            Some(names) => names.collect(),
+            Some(names) => names
+                .map(|s| Some(s.to_string()))
+                .collect(),
         };
 
-        // Set an empty vec for target machines
-        let mut machines: Vec<imd::TargetMachine> = vec![];
+        // Pad the names list with None until it's the same length as IP addresses
+        names.resize_with(ip_addresses.len(), || None);
 
-        // TODO ACTUALLY CREATE THE MACHINES BASED ON THE IPS AND NAMES
+        // Add all the valid IP addresses to the target machine list with the associates hostnames
+        for (ip_address, name) in zip(ip_addresses, names) {
+            match ip_address {
+                Ok(ip_address) => {
+                    machines.push(
+                        imd::TargetMachine::new(
+                            name,
+                            ip_address
+                        )
+                    )
+                },
+                Err(_) => {
+                    let log = imd::format_log("Ooops", "An entered IP addresses wasn't actually an IP address, skipping it", Some(imd::Color::Red));
+                    tx.send(log).unwrap();
+                },
+            }
+        }
 
         // Run the who command to determine the logged in user (hopefully the person who ran imd)
         let name = imd::get_command_output("who", [].to_vec()).unwrap();

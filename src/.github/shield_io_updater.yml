@@ -1,0 +1,30 @@
+name: Shields data builder
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  update-imd:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - uses: dante-signal31/rust-app-version@v1.0.0
+      id: imd_ver
+      with:
+        cargo_toml_folder: "/"
+    - name: Update imd version
+      uses: jossef/action-set-json-field@v2
+      with:
+        file: ".custom_shields/imd.json"
+        field: message
+        value: ${{ steps.imd_ver.outputs.app_version }}
+    - uses: stefanweifel/git-auto-commit-action@v4.14.1
+      with:
+        commit_message: "Update imd badge data via Github Action"

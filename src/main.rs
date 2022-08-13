@@ -12,7 +12,7 @@ use std::thread;
 
 fn main() {
     // Parse command line arguments and proceed if successful
-    match conf::Conf::parse(){
+    match conf::Conf::init(){
         Ok(conf) => post_main(conf),
         Err(e) => println!("{}", e.to_string().red()),
     }
@@ -28,14 +28,14 @@ fn post_main(conf: conf::Conf) {
 
     // Run the discovery function on each of the target machines in its own thread
     for machine in conf.machines().iter() {
-        let ip_address = Arc::new(machine.ip_address().to_string());
         let hostname = Arc::new(machine.hostname().to_owned());
+        let ip_address = Arc::new(machine.ip_address().to_string());
         threads.push(
             thread::spawn({
+                let hostname = hostname.clone();
+                let ip_address = ip_address.clone();
                 let tx = tx.clone();
                 let user = conf.real_user().clone();
-                let ip_address = ip_address.clone();
-                let hostname = hostname.clone();
                 move || {
                     if let Err(e) = discovery(tx.clone(), user, ip_address.clone(), hostname) {
                         let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
@@ -78,9 +78,9 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
     // Scan all TCP ports on the machine
     threads.push(
         thread::spawn({
+            let ip_address = ip_address.clone();
             let tx = tx.clone();
             let user = user.clone();
-            let ip_address = ip_address.clone();
             move || {
                 if let Err(e) =  ports::all_tcp_ports(tx.clone(), user, &ip_address) {
                     let error_context = format!("Error running full TCP port scan: '{e}'");
@@ -94,9 +94,9 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
     // Scan NFS server on the machine
     threads.push(
         thread::spawn({
+            let ip_address = ip_address.clone();
             let tx = tx.clone();
             let user = user.clone();
-            let ip_address = ip_address.clone();
             move || {
                 if let Err(e) = drives::network_drives(tx.clone(), user, &ip_address) {
                     let error_context = format!("Error running network drive scan: '{e}'");
@@ -135,12 +135,12 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
             // Spin up a thread for the vuln scan
             threads.push(
                 thread::spawn({
-                    let tx = tx.clone();
-                    let user = user.clone();
                     let ip_address = ip_address.clone();
                     let port = port.clone();
-                    let web_location = web_location.clone();
                     let service = service.clone();
+                    let tx = tx.clone();
+                    let user = user.clone();
+                    let web_location = web_location.clone();
                     move || {
                         if let Err(e) = web::vuln_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
                             let error_context = format!("Error running web vuln scan: '{e}'");
@@ -153,12 +153,12 @@ fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<
             // Spin up a thread for the web dir and file scanning
             threads.push(
                 thread::spawn({
-                    let tx = tx.clone();
-                    let user = user.clone();
                     let ip_address = ip_address.clone();
                     let port = port.clone();
-                    let web_location = web_location.clone();
                     let service = service.clone();
+                    let tx = tx.clone();
+                    let user = user.clone();
+                    let web_location = web_location.clone();
                     move || {
                         if let Err(e) = web::dir_and_file_scan(tx.clone(), user, &ip_address, &service, &port, &web_location) {
                             let error_context = format!("Error running web dir and file scan: '{e}'");

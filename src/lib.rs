@@ -95,8 +95,9 @@ pub fn format_log(machine: &str, log: &str, color: Option<Color>) -> String {
 
 
 pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<dyn Error>> {
-    let out = Command::new(command).args(args)
-                                   .output()?;
+    let out = Command::new(command)
+        .args(args)
+        .output()?;
     let out = String::from_utf8(out.stdout)?;
 
     Ok(out)

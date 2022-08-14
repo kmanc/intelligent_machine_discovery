@@ -8,9 +8,24 @@ use crossterm::style::Stylize;
 use std::error::Error;
 use std::sync::{Arc, mpsc};
 use std::thread;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::time::Duration;
 
 
 fn main() {
+    let multi = MultiProgress::new();
+    let style = ProgressStyle::default_spinner().tick_strings(&["BLANK", "Starting", "Going", "Next", "Then"]);
+    let bar1 = multi.insert(0, ProgressBar::new(100).with_style(style.clone()));
+    let bar2 = multi.insert(1, ProgressBar::new(0).with_style(style.clone()));
+    thread::sleep(Duration::from_millis(2000));
+    bar1.tick();
+    thread::sleep(Duration::from_millis(2000));
+    bar1.tick();
+    bar2.tick();
+    thread::sleep(Duration::from_millis(2000));
+    bar1.finish_with_message("Done".green().to_string());
+
+
     // Create send & receive channels
     let (tx, rx) = mpsc::channel();
 

@@ -10,6 +10,7 @@ description = "A fast discovery tool for CTF-style hacking challenges"
 [dependencies]
 clap = { version = ">=3.2.17", features = ["cargo"] }
 crossterm = ">=0.25.0"
+indicatif = ">=0.17.0"
 nix = ">=0.24.2"
 
 [profile.release]

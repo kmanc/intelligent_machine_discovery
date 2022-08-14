@@ -101,16 +101,6 @@ pub fn format_ip_address(ip_address: &str) -> String {
 }
 
 
-pub fn format_log(machine: &str, log: &str, color: Option<Color>) -> String {
-    match color {
-        Some(Color::Green) => format!("{machine: <16}- {log}").green().to_string(),
-        None => format!("{machine: <16}- {log}"),
-        Some(Color::Red) => format!("{machine: <16}- {log}").red().to_string(),
-        Some(Color::Yellow) => format!("{machine: <16}- {log}").yellow().to_string(),
-    }
-}
-
-
 pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<dyn Error>> {
     let out = Command::new(command)
         .args(args)

@@ -60,7 +60,7 @@ impl Conf {
                     )
                 },
                 Err(_) => {
-                    let log = imd::format_log("Ooops", "An entered IP addresses wasn't actually an IP address, skipping it", Some(imd::Color::Red));
+                    let log = imd::color_text("Oooops, an entered IP addresses wasn't actually an IP address, skipping it", Some(imd::Color::Red));
                     println!("{log}");
                 },
             }

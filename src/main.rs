@@ -13,19 +13,6 @@ use std::time::Duration;
 
 
 fn main() {
-    let multi = MultiProgress::new();
-    let style = ProgressStyle::default_spinner().tick_strings(&["BLANK", "Starting", "Going", "Next", "Then"]);
-    let bar1 = multi.insert(0, ProgressBar::new(100).with_style(style.clone()));
-    let bar2 = multi.insert(1, ProgressBar::new(0).with_style(style.clone()));
-    thread::sleep(Duration::from_millis(2000));
-    bar1.tick();
-    thread::sleep(Duration::from_millis(2000));
-    bar1.tick();
-    bar2.tick();
-    thread::sleep(Duration::from_millis(2000));
-    bar1.finish_with_message("Done".green().to_string());
-
-
     // Create send & receive channels
     let (tx, rx) = mpsc::channel();
 
@@ -38,6 +25,23 @@ fn main() {
 
 
 fn post_main(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>, conf: conf::Conf) {
+    // Create a multiprogress bar for housing all the individual bars
+    let bar_container = Arc::new(MultiProgress::new());
+
+    // Set a style template for bars to use
+    let bar_style = ProgressStyle::with_template("{msg}").unwrap();
+
+    /*let bar1 = bar_container.add(ProgressBar::new(0).with_style((*bar_style).clone()));
+    let bar2 = bar_container.add(ProgressBar::new(0).with_style((*bar_style).clone()));
+    let bar3 = bar_container.add(ProgressBar::new(0).with_style((*bar_style).clone()));
+    bar1.set_message("192.168.4.7     - Starting some scan");
+    bar2.set_message("192.168.4.7     - Starting other scan");
+    bar3.set_message("192.168.4.7     - Starting third scan");
+    thread::sleep(Duration::from_millis(3000));
+    bar1.finish_with_message(format!("{} {}", "192.168.4.7     - Starting some scan", "✔️ Done".green()));
+    bar2.finish_with_message(format!("{} {}", "192.168.4.7     - Starting other scan", "✔️ Done".green()));
+    bar3.finish_with_message(format!("{} {}", "192.168.4.7     - Starting other scan", "x Err".red()));*/
+
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
 
@@ -47,13 +51,15 @@ fn post_main(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>, conf: conf::C
         let ip_address = Arc::new(machine.ip_address().to_string());
         threads.push(
             thread::spawn({
+                let bar_container = bar_container.clone();
+                let bar_style = bar_style.clone();
                 let hostname = hostname.clone();
                 let ip_address = ip_address.clone();
                 let tx = tx.clone();
                 let user = conf.real_user().clone();
                 let wordlist = conf.wordlist().clone();
                 move || {
-                    if let Err(e) = discovery(tx.clone(), user, ip_address.clone(), hostname, wordlist) {
+                    if let Err(e) = discovery(tx.clone(), user, ip_address.clone(), hostname, wordlist, bar_container, bar_style) {
                         let log = imd::format_log(&ip_address, &e.to_string(), Some(imd::Color::Red));
                         tx.send(log).unwrap();
                     }
@@ -80,10 +86,10 @@ fn post_main(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>, conf: conf::C
 }
 
 
-fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>, wordlist: Arc<String>) -> Result<(), Box<dyn Error>> {
+fn discovery(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>, wordlist: Arc<String>, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    if ping::verify_connection(&tx, &ip_address).is_err() {
-        return Err("Machine could not be reached".into())
+    if ping::verify_connection(&ip_address, bar_container.clone(), bar_style.clone()).is_err() {
+        return Err("Could not reach".into())
     }
 
     // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable)

@@ -85,6 +85,20 @@ pub fn create_file(user: Arc<IMDUser>, filename: &str) -> Result<File, Box<dyn E
 }
 
 
+pub fn color_text(text: &str, color: Option<Color>) -> String {
+    match color {
+        Some(Color::Green) => text.green().to_string(),
+        None => text.to_string(),
+        Some(Color::Red) => text.red().to_string(),
+    }
+}
+
+
+pub fn format_ip_address(ip_address: &str) -> String {
+    format!("{ip_address: <16}- ")
+}
+
+
 pub fn format_log(machine: &str, log: &str, color: Option<Color>) -> String {
     match color {
         Some(Color::Green) => format!("{machine: <16}- {log}").green().to_string(),

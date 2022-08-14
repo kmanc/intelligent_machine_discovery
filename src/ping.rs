@@ -1,6 +1,7 @@
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::error::Error;
 use std::fmt;
-use std::sync::mpsc;
+use std::sync::Arc;
 
 
 #[derive(Debug)]
@@ -17,22 +18,24 @@ impl fmt::Display for ConnectionError {
 }
 
 
-pub fn verify_connection(tx: &mpsc::Sender<String>, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn verify_connection(ip_address: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+    // Create a bar for messaging progress
+    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    
     // Report that we are verifying connectivity
-    let log = imd::format_log(ip_address, "Verifying connectivity", None);
-    tx.send(log)?;
+    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), "Verifying connectivity"));
     
     // Run the ping command and capture the output
     let args = vec!["-c", "4", ip_address];
     let command = imd::get_command_output("ping", args)?;
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
-        return Err(Box::new(ConnectionError))
+        bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Verifying connectivity", imd::color_text("x Machine could not be reached", Some(imd::Color::Red))));
+        return Err("Could not reach".into())
     }
 
     // Report that we were successful in verifying the connection
-    let log = imd::format_log(ip_address, "Connection confirmed", Some(imd::Color::Green));
-    tx.send(log)?;
-
+    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Verifying connectivity", imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    
     Ok(())
 }

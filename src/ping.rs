@@ -18,7 +18,7 @@ impl fmt::Display for ConnectionError {
 }
 
 
-pub fn verify_connection(ip_address: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+pub fn verify_connection(ip_address: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<imd::PingResult, Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
     
@@ -31,11 +31,11 @@ pub fn verify_connection(ip_address: &str, bar_container: Arc<MultiProgress>, ba
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
         bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Verifying connectivity", imd::color_text("x Machine could not be reached", Some(imd::Color::Red))));
-        return Err("Could not reach".into())
+        return Ok(imd::PingResult::Bad)
     }
 
     // Report that we were successful in verifying the connection
     bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Verifying connectivity", imd::color_text("✔️ Done", Some(imd::Color::Green))));
     
-    Ok(())
+    Ok(imd::PingResult::Good)
 }

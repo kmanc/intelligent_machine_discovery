@@ -14,6 +14,12 @@ pub enum Color {
 }
 
 
+pub enum PingResult {
+    Good,
+    Bad,
+}
+
+
 pub struct TargetMachine {
     hostname: Option<String>, 
     ip_address: IpAddr,

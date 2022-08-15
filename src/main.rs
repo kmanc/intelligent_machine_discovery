@@ -43,10 +43,7 @@ fn post_main(conf: conf::Conf) {
                 let user = conf.real_user().clone();
                 let wordlist = conf.wordlist().clone();
                 move || {
-                    if let Err(e) = discovery(user, ip_address.clone(), hostname, wordlist, bar_container, bar_style) {
-                        let message = format!("{}{}", imd::format_ip_address(&ip_address), imd::color_text(&format!("x Discovery failed at {e}"), Some(imd::Color::Red)));
-                        println!("{message}");
-                    }
+                    if discovery(user, ip_address.clone(), hostname, wordlist, bar_container, bar_style).is_err() {}
                 }
             })        
         );
@@ -63,8 +60,10 @@ fn post_main(conf: conf::Conf) {
 
 fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>, wordlist: Arc<String>, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    if ping::verify_connection(&ip_address, bar_container.clone(), bar_style.clone()).is_err() {
-        return Err("Connection".into())
+    match ping::verify_connection(&ip_address, bar_container.clone(), bar_style.clone()) {
+        Err(_) => return Err("Connection".into()),
+        Ok(imd::PingResult::Bad) => return Err("Connection".into()),
+        Ok(imd::PingResult::Good) => {},
     }
 
     // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable)
@@ -110,16 +109,18 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
         })
     );
 
-    // Scan common TCP ports and perform service discovery
-    let port_scan = match ports::common_tcp_ports(user.clone(), &ip_address, bar_container.clone(), bar_style.clone()) {
-        Ok(port_scan) => port_scan,
-        Err(_) => {
-            return Err("Common TCP scan".into())
-        },
-    };
-
-    // Parse the port scan to determine which services are running and where
-    let services = utils::parse_port_scan(&ip_address, &port_scan, bar_container.clone(), bar_style.clone())?;
+    // This is a workaround for indicatif having issues with some bars being in threads and others not
+    // Spin up a thread for the common TCP port scan and the parsing of the results; immediately join on it to block further execution till it's complete
+    let services = thread::spawn({
+        let bar_container = bar_container.clone();
+        let bar_style = bar_style.clone();
+        let ip_address = ip_address.clone();
+        let user = user.clone();
+        move || {
+            let port_scan = ports::common_tcp_ports(user, &ip_address, bar_container.clone(), bar_style.clone()).unwrap();
+            utils::parse_port_scan(&ip_address, &port_scan, bar_container, bar_style).unwrap()
+        }
+    }).join().unwrap();
     let services = Arc::new(services);
 
     // For now we are only parsing web servers, so scan them for vulnerabilities, directories, and files

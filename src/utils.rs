@@ -49,6 +49,7 @@ pub fn create_dir(user: Arc<imd::IMDUser>, ip_address: &str, bar_container: Arc<
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
     if fs::create_dir(ip_address).is_err() {
         bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Creating directory to store results in", imd::color_text("x Directory already exists, skipping", Some(imd::Color::Yellow))));
+        return Ok(())
     }
 
     // Change ownership of the directory to the logged in user from Args
@@ -56,7 +57,6 @@ pub fn create_dir(user: Arc<imd::IMDUser>, ip_address: &str, bar_container: Arc<
 
     // Report that we were successful in creating the results directory
     bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Creating directory to store results in", imd::color_text("✔️ Done", Some(imd::Color::Green))));
-
 
     Ok(())
 }

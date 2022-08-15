@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt;
 use std::iter::zip;
 use std::net::IpAddr;
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
 
 
 pub struct Conf {
@@ -16,7 +16,7 @@ pub struct Conf {
 
 
 impl Conf {
-    pub fn init(tx: mpsc::Sender<String>) -> Result<Conf, NotSudo> {
+    pub fn init() -> Result<Conf, NotSudo> {
         // Set up the command line arguments and their associated settings
         let app = cli();
 
@@ -60,8 +60,8 @@ impl Conf {
                     )
                 },
                 Err(_) => {
-                    let log = imd::format_log("Ooops", "An entered IP addresses wasn't actually an IP address, skipping it", Some(imd::Color::Red));
-                    tx.send(log).unwrap();
+                    let log = imd::color_text("Oooops, an entered IP addresses wasn't actually an IP address, skipping it", Some(imd::Color::Red));
+                    println!("{log}");
                 },
             }
         }

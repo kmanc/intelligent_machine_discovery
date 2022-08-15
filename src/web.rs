@@ -1,12 +1,16 @@
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::error::Error;
 use std::io::Write;
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
 
 
-pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, wordlist: &str) -> Result<(), Box<dyn Error>> {
-    // Report that we are scanning for web directories
-    let log = imd::format_log(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"), None);
-    tx.send(log)?;
+pub fn dir_and_file_scan(user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, wordlist: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+    // Create a bar for messaging progress
+    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    
+    // Report that we are scanning for web vulnerabilities
+    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'")));
+
 
     let full_location = format!("{protocol}://{web_location}:{port}");
 
@@ -24,18 +28,19 @@ pub fn dir_and_file_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_a
     // Write the command output to the file
     writeln!(f, "{command}")?;
 
-    // Report that we completed the web vuln scan
-    let log = imd::format_log(ip_address, &format!("Web port {port} directory and file scan complete"), Some(imd::Color::Green));
-    tx.send(log)?;
+    // Report that we were successful in adding to /etc/hosts
+    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"), imd::color_text("✔️ Done", Some(imd::Color::Green))));
 
     Ok(())
 }
 
 
-pub fn vuln_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str) -> Result<(), Box<dyn Error>> {
+pub fn vuln_scan(user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+    // Create a bar for messaging progress
+    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    
     // Report that we are scanning for web vulnerabilities
-    let log = imd::format_log(ip_address, &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"), None);
-    tx.send(log)?;
+    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'")));
 
     let full_location = format!("{protocol}://{web_location}:{port}");
 
@@ -51,8 +56,7 @@ pub fn vuln_scan(tx: mpsc::Sender<String>, user: Arc<imd::IMDUser>, ip_address: 
     writeln!(f, "{command}")?;
 
     // Report that we completed the web vuln scan
-    let log = imd::format_log(ip_address, &format!("Web port {port} vuln scan complete"), Some(imd::Color::Green));
-    tx.send(log)?;
+    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"), imd::color_text("✔️ Done", Some(imd::Color::Green))));
 
     Ok(())
 }

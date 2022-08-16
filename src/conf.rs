@@ -1,8 +1,6 @@
 use clap::{crate_authors, crate_description, crate_name, crate_version, Arg, Command, ValueHint};
 use nix::unistd::{Gid, Uid, User};
 use std::env;
-use std::error::Error;
-use std::fmt;
 use std::iter::zip;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -10,13 +8,13 @@ use std::sync::Arc;
 
 pub struct Conf {
     machines: Vec<imd::TargetMachine>,
-    real_user: Arc<imd::IMDUser>,
+    user: Arc<imd::IMDUser>,
     wordlist: Arc<String>,
 }
 
 
 impl Conf {
-    pub fn init() -> Result<Conf, NotSudo> {
+    pub fn init() -> Conf {
         // Set up the command line arguments and their associated settings
         let app = cli();
 
@@ -25,7 +23,7 @@ impl Conf {
 
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
-            return Err(NotSudo);
+            panic!("{}", imd::color_text("imd must be run with root permissions, please try running 'sudo!!'", Some(imd::Color::Red)))
         }
 
         // Set an empty vec for target machines
@@ -86,39 +84,25 @@ impl Conf {
         let wordlist = matches.get_one::<String>("wordlist").unwrap().to_string();
 
         // Return the args, which includes the target machines, the logged in user, and the wordlist
-        Ok(Conf {
+        Conf {
             machines,
-            real_user: Arc::new(user),
+            user: Arc::new(user),
             wordlist: Arc::new(wordlist),
-        })
+        }
     }
 
     pub fn machines(&self) -> &Vec<imd::TargetMachine> {
         &self.machines
     }
 
-    pub fn real_user(&self) -> &Arc<imd::IMDUser> {
-        &self.real_user
+    pub fn user(&self) -> &Arc<imd::IMDUser> {
+        &self.user
     }
 
     pub fn wordlist(&self) -> &Arc<String> {
         &self.wordlist
     }
 
-}
-
-
-#[derive(Debug)]
-pub struct NotSudo;
-
-
-impl Error for NotSudo {}
-
-
-impl fmt::Display for NotSudo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "imd must be run with root permissions, please try running 'sudo !!'")
-    }
 }
 
 

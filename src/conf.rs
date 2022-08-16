@@ -23,7 +23,8 @@ impl Conf {
 
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
-            panic!("{}", imd::color_text("imd must be run with root permissions, please try running 'sudo!!'", Some(imd::Color::Red)))
+            let error = imd::report_bad("imd must be run with root permissions, please try running 'sudo!!'");
+            panic!("{error}")
         }
 
         // Set an empty vec for target machines
@@ -58,7 +59,7 @@ impl Conf {
                     )
                 },
                 Err(_) => {
-                    let log = imd::color_text("Oooops, an entered IP addresses wasn't actually an IP address, skipping it", Some(imd::Color::Red));
+                    let log = imd::report_bad("Oooops, an entered IP addresses wasn't actually an IP address, skipping it");
                     println!("{log}");
                 },
             }

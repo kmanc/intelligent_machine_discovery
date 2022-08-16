@@ -1,4 +1,5 @@
-use crossterm::style::Stylize;
+use crossterm::style::{Stylize, StyledContent};
+use indicatif::{ProgressBar, ProgressStyle};
 use nix::unistd::{chown, Gid, Uid};
 use std::error::Error;
 use std::fs::File;
@@ -92,17 +93,16 @@ pub fn create_file(user: Arc<IMDUser>, filename: &str) -> Result<File, Box<dyn E
 }
 
 
-pub fn color_text(text: &str, color: Option<Color>) -> String {
+fn color_text(text: &str, color: Color) -> StyledContent<&str> {
     match color {
-        Some(Color::Green) => text.green().to_string(),
-        None => text.to_string(),
-        Some(Color::Red) => text.red().to_string(),
-        Some(Color::Yellow) => text.yellow().to_string(),
+        Color::Green => text.green(),
+        Color::Red => text.red(),
+        Color::Yellow => text.yellow(),
     }
 }
 
 
-pub fn format_ip_address(ip_address: &str) -> String {
+fn format_ip_address(ip_address: &str) -> String {
     format!("{ip_address: <16}- ")
 }
 
@@ -114,4 +114,33 @@ pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<
     let out = String::from_utf8(out.stdout)?;
 
     Ok(out)
+}
+
+
+pub fn make_new_bar() -> ProgressBar {
+    let style = ProgressStyle::with_template("{msg}").unwrap();
+    ProgressBar::new(0).with_style(style)
+}
+
+
+pub fn make_message_starter(ip_address: &str, content: &str) -> String {
+    let formatted_ip = format_ip_address(ip_address);
+    format!("{formatted_ip}{content} ")
+}
+
+
+pub fn report_bad(text: &str) -> String {
+    let text = format!("✕ {text}");
+    color_text(&text, Color::Red).to_string()
+}
+
+
+pub fn report_good(text: &str) -> String {
+    let text = format!("✔️ {text}");
+    color_text(&text, Color::Green).to_string()
+}
+
+
+pub fn report_neutral(text: &str) -> String {
+    color_text(text, Color::Yellow).to_string()
 }

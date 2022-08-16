@@ -1,15 +1,19 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
 
-pub fn network_drives(user: Arc<imd::IMDUser>, ip_address: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+pub fn network_drives(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
-    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    let bar = bar_container.add(imd::make_new_bar());
+
+    // All messages logged will start with the same thing so create it once up front
+    let starter = imd::make_message_starter(ip_address, "Scanning for network drives using 'showmount -e'");
+    let starter_clone = starter.clone();
     
-    // Report that we are adding the machine to /etc/hosts
-    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), "Scanning for network drives using 'showmount -e'"));
+    // Report that we are scanning for NFS shares
+    bar.set_message(starter);
 
     // Run the showmount command and capture the output
     let args = vec!["-e", ip_address];
@@ -24,7 +28,8 @@ pub fn network_drives(user: Arc<imd::IMDUser>, ip_address: &str, bar_container: 
 
     // Report that we completed the network drive scan
     // Report that we were successful in adding to /etc/hosts
-    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Scanning for network drives using 'showmount -e'", imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    let output = imd::report_good("Done");
+    bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 

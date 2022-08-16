@@ -4,8 +4,7 @@ mod ping;
 mod ports;
 mod utils;
 mod web;
-use crossterm::style::Stylize;
-use indicatif::{MultiProgress, ProgressStyle};
+use indicatif::MultiProgress;
 use std::error::Error;
 use std::sync::Arc;
 use std::thread;
@@ -13,19 +12,14 @@ use std::thread;
 
 fn main() {
     // Parse command line arguments and proceed if successful
-    match conf::Conf::init(){
-        Ok(conf) => post_main(conf),
-        Err(e) => println!("{}", e.to_string().red()),
-    }
+    let conf = conf::Conf::init();
+    post_main(conf);
 }
 
 
 fn post_main(conf: conf::Conf) {
     // Create a multiprogress bar for housing all the individual bars
     let bar_container = Arc::new(MultiProgress::new());
-
-    // Set a style template for bars to use
-    let bar_style = ProgressStyle::with_template("{msg}").unwrap();
 
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
@@ -37,13 +31,12 @@ fn post_main(conf: conf::Conf) {
         threads.push(
             thread::spawn({
                 let bar_container = bar_container.clone();
-                let bar_style = bar_style.clone();
                 let hostname = hostname.clone();
                 let ip_address = ip_address.clone();
-                let user = conf.real_user().clone();
+                let user = conf.user().clone();
                 let wordlist = conf.wordlist().clone();
                 move || {
-                    if discovery(user, ip_address.clone(), hostname, wordlist, bar_container, bar_style).is_err() {}
+                    if discovery(bar_container, user, ip_address, hostname, wordlist).is_err() {}
                 }
             })        
         );
@@ -58,27 +51,27 @@ fn post_main(conf: conf::Conf) {
 }
 
 
-fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>, wordlist: Arc<String>, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+fn discovery(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Option<String>>, wordlist: Arc<String>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    match ping::verify_connection(&ip_address, bar_container.clone(), bar_style.clone()) {
+    match ping::verify_connection(bar_container.clone(), &ip_address) {
         Err(_) => return Err("Connection".into()),
         Ok(imd::PingResult::Bad) => return Err("Connection".into()),
         Ok(imd::PingResult::Good) => {},
     }
-
+    
     // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable)
     // Otherwise skip the /etc/hosts file and use the IP address for web scans
     let web_location: Arc<String> = match &*hostname {
         Some(hostname) => {
             let hostname = Arc::new(hostname.to_string());
-            utils::add_to_etc_hosts(&hostname, &ip_address, bar_container.clone(), bar_style.clone()).unwrap();
+            utils::add_to_etc_hosts(bar_container.clone(), &hostname, &ip_address).unwrap();
             hostname
         },
         None => ip_address.clone(),
     };
-
+   
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(user.clone(), &ip_address, bar_container.clone(), bar_style.clone())?;
+    utils::create_dir(bar_container.clone(), user.clone(), &ip_address)?;
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
@@ -87,24 +80,22 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
     threads.push(
         thread::spawn({
             let bar_container = bar_container.clone();
-            let bar_style = bar_style.clone();
             let ip_address = ip_address.clone();
             let user = user.clone();
             move || {
-                if ports::all_tcp_ports(user, &ip_address, bar_container, bar_style).is_err() {}
+                if ports::all_tcp_ports(bar_container, user, &ip_address).is_err() {}
             }
         })
     );
-
+ 
     // Scan NFS server on the machine
     threads.push(
         thread::spawn({
             let bar_container = bar_container.clone();
-            let bar_style = bar_style.clone();
             let ip_address = ip_address.clone();
             let user = user.clone();
             move || {
-                if drives::network_drives(user, &ip_address, bar_container, bar_style).is_err() {}
+                if drives::network_drives(bar_container, user, &ip_address).is_err() {}
             }
         })
     );
@@ -113,12 +104,11 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
     // Spin up a thread for the common TCP port scan and the parsing of the results; immediately join on it to block further execution till it's complete
     let services = thread::spawn({
         let bar_container = bar_container.clone();
-        let bar_style = bar_style.clone();
         let ip_address = ip_address.clone();
         let user = user.clone();
         move || {
-            let port_scan = ports::common_tcp_ports(user, &ip_address, bar_container.clone(), bar_style.clone()).unwrap();
-            utils::parse_port_scan(&ip_address, &port_scan, bar_container, bar_style).unwrap()
+            let port_scan = ports::common_tcp_ports(bar_container.clone(), user, &ip_address).unwrap();
+            utils::parse_port_scan(bar_container, &ip_address, &port_scan).unwrap()
         }
     }).join().unwrap();
     let services = Arc::new(services);
@@ -130,14 +120,13 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
             threads.push(
                 thread::spawn({
                     let bar_container = bar_container.clone();
-                    let bar_style = bar_style.clone();
                     let ip_address = ip_address.clone();
                     let port = port.clone();
                     let service = service.clone();
                     let user = user.clone();
                     let web_location = web_location.clone();
                     move || {
-                        if web::vuln_scan(user, &ip_address, &service, &port, &web_location, bar_container, bar_style).is_err() {}
+                        if web::vuln_scan(bar_container, user, &ip_address, &service, &port, &web_location).is_err() {}
                     }
                 })
             );
@@ -145,7 +134,6 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
             threads.push(
                 thread::spawn({
                     let bar_container = bar_container.clone();
-                    let bar_style = bar_style.clone();
                     let ip_address = ip_address.clone();
                     let port = port.clone();
                     let service = service.clone();
@@ -153,7 +141,7 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
                     let web_location = web_location.clone();
                     let wordlist = wordlist.clone();
                     move || {
-                        if web::dir_and_file_scan(user, &ip_address, &service, &port, &web_location, &wordlist, bar_container, bar_style).is_err() {}
+                        if web::dir_and_file_scan(bar_container, user, &ip_address, &service, &port, &web_location, &wordlist).is_err() {}
                     }
                 })
             );
@@ -164,6 +152,6 @@ fn discovery(user: Arc<imd::IMDUser>, ip_address: Arc<String>, hostname: Arc<Opt
     for thread in threads {
         thread.join().unwrap();
     }
-
+    
     Ok(())
 }

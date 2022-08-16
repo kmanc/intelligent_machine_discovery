@@ -99,18 +99,17 @@ fn discovery(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_addr
             }
         })
     );
+    
+    // Scan common TCP ports and perform service discovery
+    let port_scan = match ports::common_tcp_ports(bar_container.clone(), user.clone(), &ip_address) {
+        Ok(port_scan) => port_scan,
+        Err(_) => {
+            return Err("Common TCP port scan".into())
+        },
+    };
 
-    // This is a workaround for indicatif having issues with some bars being in threads and others not
-    // Spin up a thread for the common TCP port scan and the parsing of the results; immediately join on it to block further execution till it's complete
-    let services = thread::spawn({
-        let bar_container = bar_container.clone();
-        let ip_address = ip_address.clone();
-        let user = user.clone();
-        move || {
-            let port_scan = ports::common_tcp_ports(bar_container.clone(), user, &ip_address).unwrap();
-            utils::parse_port_scan(bar_container, &ip_address, &port_scan).unwrap()
-        }
-    }).join().unwrap();
+    // Parse the port scan to determine which services are running and where
+    let services = utils::parse_port_scan(bar_container.clone(), &ip_address, port_scan);
     let services = Arc::new(services);
 
     // For now we are only parsing web servers, so scan them for vulnerabilities, directories, and files

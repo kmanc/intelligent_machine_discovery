@@ -1,21 +1,6 @@
 use indicatif::MultiProgress;
 use std::error::Error;
-use std::fmt;
 use std::sync::Arc;
-
-
-#[derive(Debug)]
-struct ConnectionError;
-
-
-impl Error for ConnectionError {}
-
-
-impl fmt::Display for ConnectionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "The target machine could not be reached")
-    }
-}
 
 
 pub fn verify_connection(bars_container: Arc<MultiProgress>, ip_address: &str) -> Result<imd::PingResult, Box<dyn Error>> {

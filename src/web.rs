@@ -9,7 +9,7 @@ pub fn dir_and_file_scan(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUs
     let bar = bar_container.add(imd::make_new_bar());
     
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_address, "Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'");
+    let starter = imd::make_message_starter(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"));
     let starter_clone = starter.clone();
     
     // Report that we are scanning for web directories and files
@@ -25,8 +25,8 @@ pub fn dir_and_file_scan(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUs
     let command = command.replace("\n\n", "\n");
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/web_dirs_and_files_port_{port}");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/web_dirs_and_files_port_{port}");
+    let mut f = imd::create_file(user, &output_file)?;
 
     // Write the command output to the file
     writeln!(f, "{command}")?;
@@ -44,7 +44,7 @@ pub fn vuln_scan(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_
     let bar = bar_container.add(imd::make_new_bar());
     
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_address, "Scanning for web vulnerabilities on port {port} with 'nikto -host'");
+    let starter = imd::make_message_starter(ip_address, &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"));
     let starter_clone = starter.clone();
     
     // Report that we are scanning for web vulnerabilities
@@ -57,8 +57,8 @@ pub fn vuln_scan(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_
     let command = imd::get_command_output("nikto", args)?;
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/web_vulns_port_{port}");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/web_vulns_port_{port}");
+    let mut f = imd::create_file(user, &output_file)?;    
 
     // Write the command output to the file
     writeln!(f, "{command}")?;

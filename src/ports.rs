@@ -20,8 +20,8 @@ pub fn all_tcp_ports(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>,
     let command = imd::get_command_output("nmap", args)?;
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/all_tcp_ports");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/all_tcp_ports");
+    let mut f = imd::create_file(user, &output_file)?;
 
     // Write the command output to the file
     writeln!(f, "{command}")?;
@@ -50,8 +50,8 @@ pub fn common_tcp_ports(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUse
     let command = imd::get_command_output("nmap", args)?;
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/common_tcp_ports");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/common_tcp_ports");
+    let mut f = imd::create_file(user, &output_file)?;
 
     // Write the command output to the file
     writeln!(f, "{command}")?;

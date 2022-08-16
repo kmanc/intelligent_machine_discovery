@@ -74,7 +74,7 @@ pub fn create_dir(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip
 }
 
 
-pub fn parse_port_scan(bar_container: Arc<MultiProgress>, ip_address: &str, port_scan: &str) -> Result<HashMap<String, Vec<String>>, Box<dyn Error>> {
+pub fn parse_port_scan(bar_container: Arc<MultiProgress>, ip_address: &str, port_scan: String) -> HashMap<String, Vec<String>> {
     // Create a bar for messaging progress
     let bar = bar_container.add(imd::make_new_bar());
     
@@ -117,5 +117,5 @@ pub fn parse_port_scan(bar_container: Arc<MultiProgress>, ip_address: &str, port
     let output = imd::report_good("Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
-    Ok(services_map)
+    services_map
 }

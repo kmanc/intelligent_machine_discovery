@@ -20,8 +20,8 @@ pub fn network_drives(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>
     let command = imd::get_command_output("showmount", args)?;
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/nfs_shares");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/nfs_shares");
+    let mut f = imd::create_file(user, &output_file)?;
 
     // Write the command output to the file
     writeln!(f, "{command}")?;
@@ -32,5 +32,4 @@ pub fn network_drives(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
-
 }

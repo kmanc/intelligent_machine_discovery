@@ -142,5 +142,6 @@ pub fn report_good(text: &str) -> String {
 
 
 pub fn report_neutral(text: &str) -> String {
-    color_text(text, Color::Yellow).to_string()
+    let text = format!("~ {text}");
+    color_text(&text, Color::Yellow).to_string()
 }

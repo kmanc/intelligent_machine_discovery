@@ -1,6 +1,6 @@
 [package]
 name = "imd"
-version = "1.3.0"
+version = "1.4.0"
 authors = ["Kevin Conley <koins@duck.com>"]
 edition = "2021"
 description = "A fast discovery tool for CTF-style hacking challenges"

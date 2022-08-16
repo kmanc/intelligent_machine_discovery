@@ -1,16 +1,19 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
 
-pub fn dir_and_file_scan(user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, wordlist: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+pub fn dir_and_file_scan(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, wordlist: &str) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
-    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    let bar = bar_container.add(imd::make_new_bar());
     
-    // Report that we are scanning for web vulnerabilities
-    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'")));
-
+    // All messages logged will start with the same thing so create it once up front
+    let starter = imd::make_message_starter(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"));
+    let starter_clone = starter.clone();
+    
+    // Report that we are scanning for web directories and files
+    bar.set_message(starter);
 
     let full_location = format!("{protocol}://{web_location}:{port}");
 
@@ -22,25 +25,30 @@ pub fn dir_and_file_scan(user: Arc<imd::IMDUser>, ip_address: &str, protocol: &s
     let command = command.replace("\n\n", "\n");
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/web_dirs_and_files_port_{port}");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/web_dirs_and_files_port_{port}");
+    let mut f = imd::create_file(user, &output_file)?;
 
     // Write the command output to the file
     writeln!(f, "{command}")?;
 
     // Report that we were successful in adding to /etc/hosts
-    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"), imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    let output = imd::report_good("Done");
+    bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }
 
 
-pub fn vuln_scan(user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+pub fn vuln_scan(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port: &str, web_location: &str) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
-    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    let bar = bar_container.add(imd::make_new_bar());
+    
+    // All messages logged will start with the same thing so create it once up front
+    let starter = imd::make_message_starter(ip_address, &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"));
+    let starter_clone = starter.clone();
     
     // Report that we are scanning for web vulnerabilities
-    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'")));
+    bar.set_message(starter);
 
     let full_location = format!("{protocol}://{web_location}:{port}");
 
@@ -49,14 +57,15 @@ pub fn vuln_scan(user: Arc<imd::IMDUser>, ip_address: &str, protocol: &str, port
     let command = imd::get_command_output("nikto", args)?;
 
     // Create a file for the results
-    let output_filename = format!("{ip_address}/web_vulns_port_{port}");
-    let mut f = imd::create_file(user, &output_filename)?;
+    let output_file = format!("{ip_address}/web_vulns_port_{port}");
+    let mut f = imd::create_file(user, &output_file)?;    
 
     // Write the command output to the file
     writeln!(f, "{command}")?;
 
     // Report that we completed the web vuln scan
-    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host'"), imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    let output = imd::report_good("Done");
+    bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }

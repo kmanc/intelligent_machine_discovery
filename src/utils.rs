@@ -1,4 +1,4 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
@@ -6,12 +6,16 @@ use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
 
-pub fn add_to_etc_hosts(hostname: &str, ip_address: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+pub fn add_to_etc_hosts(bar_container: Arc<MultiProgress>, hostname: &str, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
-    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    let bar = bar_container.add(imd::make_new_bar());
     
+    // All messages logged will start with the same thing so create it once up front
+    let starter = imd::make_message_starter(ip_address, "Adding to /etc/hosts");
+    let starter_clone = starter.clone();
+
     // Report that we are adding the machine to /etc/hosts
-    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), "Adding to /etc/hosts"));
+    bar.set_message(starter);
 
     // Open the /etc/hosts files and read it line by line
     let host_file = File::open("/etc/hosts")?;
@@ -20,7 +24,8 @@ pub fn add_to_etc_hosts(hostname: &str, ip_address: &str, bar_container: Arc<Mul
         let line = line?;
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
         if line.contains(ip_address) && line.contains(hostname) {
-            bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Adding to /etc/hosts", imd::color_text("x Entry already in /etc/hosts, skipping", Some(imd::Color::Yellow))));
+            let output = imd::report_neutral("Entry already in /etc/hosts, skipping");
+            bar.finish_with_message(format!("{starter_clone}{output}"));
             return Ok(())
         }
     }
@@ -33,22 +38,28 @@ pub fn add_to_etc_hosts(hostname: &str, ip_address: &str, bar_container: Arc<Mul
     writeln!(&host_file, "{} {}", ip_address, hostname)?;
 
     // Report that we were successful in adding to /etc/hosts
-    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Adding to /etc/hosts", imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    let output = imd::report_good("Done");
+    bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }
 
 
-pub fn create_dir(user: Arc<imd::IMDUser>, ip_address: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<(), Box<dyn Error>> {
+pub fn create_dir(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
-    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    let bar = bar_container.add(imd::make_new_bar());
     
-    // Report that we are creating the results directory
-    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), "Creating directory to store results in"));
+    // All messages logged will start with the same thing so create it once up front
+    let starter = imd::make_message_starter(ip_address, "Creating directory to store results in");
+    let starter_clone = starter.clone();
+
+    // Report that we are creating a dir for the results
+    bar.set_message(starter);
 
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
     if fs::create_dir(ip_address).is_err() {
-        bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Creating directory to store results in", imd::color_text("x Directory already exists, skipping", Some(imd::Color::Yellow))));
+        let output = imd::report_neutral("Directory already exists, skipping");
+        bar.finish_with_message(format!("{starter_clone}{output}"));
         return Ok(())
     }
 
@@ -56,19 +67,23 @@ pub fn create_dir(user: Arc<imd::IMDUser>, ip_address: &str, bar_container: Arc<
     imd::change_owner(ip_address, user)?;
 
     // Report that we were successful in creating the results directory
-    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Creating directory to store results in", imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    let output = imd::report_good("Done");
+    bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }
 
 
-pub fn parse_port_scan(ip_address: &str, port_scan: &str, bar_container: Arc<MultiProgress>, bar_style: ProgressStyle) -> Result<HashMap<String, Vec<String>>, Box<dyn Error>> {
+pub fn parse_port_scan(bar_container: Arc<MultiProgress>, ip_address: &str, port_scan: String) -> HashMap<String, Vec<String>> {
     // Create a bar for messaging progress
-    let bar = bar_container.add(ProgressBar::new(0).with_style(bar_style));
+    let bar = bar_container.add(imd::make_new_bar());
     
-    // Report that we are creating the results directory
-    bar.set_message(format!("{}{}", imd::format_ip_address(ip_address), "Parsing port scan to determine next steps"));
-
+    // All messages logged will start with the same thing so create it once up front
+    let starter = imd::make_message_starter(ip_address, "Parsing port scan to determine next steps");
+    let starter_clone = starter.clone();
+    
+    // Report that we are parsing the port scan
+    bar.set_message(starter);
 
     // Prep the scan string for searching by splitting it to a vector of lines, trimming each line, and removing lines that start with "|" or "SF:"
     let port_scan: Vec<String> = port_scan
@@ -99,8 +114,8 @@ pub fn parse_port_scan(ip_address: &str, port_scan: &str, bar_container: Arc<Mul
     }
 
     // Report that we were successful in parsing the port scan
-    bar.finish_with_message(format!("{}{} {}", imd::format_ip_address(ip_address), "Parsing port scan to determine next steps", imd::color_text("✔️ Done", Some(imd::Color::Green))));
+    let output = imd::report_good("Done");
+    bar.finish_with_message(format!("{starter_clone}{output}"));
 
-
-    Ok(services_map)
+    services_map
 }

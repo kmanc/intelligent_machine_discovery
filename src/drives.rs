@@ -27,7 +27,6 @@ pub fn network_drives(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>
     writeln!(f, "{command}")?;
 
     // Report that we completed the network drive scan
-    // Report that we were successful in adding to /etc/hosts
     let output = imd::report_good("Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 

@@ -3,15 +3,21 @@ use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
-
-pub fn network_drives(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn network_drives(
+    bar_container: Arc<MultiProgress>,
+    user: Arc<imd::IMDUser>,
+    ip_address: &str,
+) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = bar_container.add(imd::make_new_bar());
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_address, "Scanning for network drives using 'showmount -e'");
+    let starter = imd::make_message_starter(
+        ip_address,
+        "Scanning for network drives using 'showmount -e'",
+    );
     let starter_clone = starter.clone();
-    
+
     // Report that we are scanning for NFS shares
     bar.set_message(starter);
 

@@ -5,11 +5,14 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
-
-pub fn add_to_etc_hosts(bar_container: Arc<MultiProgress>, hostname: &str, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn add_to_etc_hosts(
+    bar_container: Arc<MultiProgress>,
+    hostname: &str,
+    ip_address: &str,
+) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = bar_container.add(imd::make_new_bar());
-    
+
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(ip_address, "Adding to /etc/hosts");
     let starter_clone = starter.clone();
@@ -26,14 +29,12 @@ pub fn add_to_etc_hosts(bar_container: Arc<MultiProgress>, hostname: &str, ip_ad
         if line.contains(ip_address) && line.contains(hostname) {
             let output = imd::report_neutral("Entry already in /etc/hosts, skipping");
             bar.finish_with_message(format!("{starter_clone}{output}"));
-            return Ok(())
+            return Ok(());
         }
     }
 
     // If we didn't already return, add the entry to the /etc/hosts file because it wasn't there
-    let host_file = OpenOptions::new()
-        .append(true)
-        .open("/etc/hosts")?;
+    let host_file = OpenOptions::new().append(true).open("/etc/hosts")?;
 
     writeln!(&host_file, "{} {}", ip_address, hostname)?;
 
@@ -44,11 +45,14 @@ pub fn add_to_etc_hosts(bar_container: Arc<MultiProgress>, hostname: &str, ip_ad
     Ok(())
 }
 
-
-pub fn create_dir(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip_address: &str) -> Result<(), Box<dyn Error>> {
+pub fn create_dir(
+    bar_container: Arc<MultiProgress>,
+    user: Arc<imd::IMDUser>,
+    ip_address: &str,
+) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = bar_container.add(imd::make_new_bar());
-    
+
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(ip_address, "Creating directory to store results in");
     let starter_clone = starter.clone();
@@ -60,7 +64,7 @@ pub fn create_dir(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip
     if fs::create_dir(ip_address).is_err() {
         let output = imd::report_neutral("Directory already exists, skipping");
         bar.finish_with_message(format!("{starter_clone}{output}"));
-        return Ok(())
+        return Ok(());
     }
 
     // Change ownership of the directory to the logged in user from Args
@@ -73,15 +77,19 @@ pub fn create_dir(bar_container: Arc<MultiProgress>, user: Arc<imd::IMDUser>, ip
     Ok(())
 }
 
-
-pub fn parse_port_scan(bar_container: Arc<MultiProgress>, ip_address: &str, port_scan: String) -> HashMap<String, Vec<String>> {
+pub fn parse_port_scan(
+    bar_container: Arc<MultiProgress>,
+    ip_address: &str,
+    port_scan: String,
+) -> HashMap<String, Vec<String>> {
     // Create a bar for messaging progress
     let bar = bar_container.add(imd::make_new_bar());
-    
+
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_address, "Parsing port scan to determine next steps");
+    let starter =
+        imd::make_message_starter(ip_address, "Parsing port scan to determine next steps");
     let starter_clone = starter.clone();
-    
+
     // Report that we are parsing the port scan
     bar.set_message(starter);
 
@@ -108,7 +116,10 @@ pub fn parse_port_scan(bar_container: Arc<MultiProgress>, ip_address: &str, port
                     &"ssl/http" => "https",
                     _ => service,
                 };
-                services_map.entry(service.to_string()).or_default().push(port.to_string());
+                services_map
+                    .entry(service.to_string())
+                    .or_default()
+                    .push(port.to_string());
             }
         }
     }

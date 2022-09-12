@@ -5,13 +5,11 @@ use std::iter::zip;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-
 pub struct Conf {
     machines: Vec<imd::TargetMachine>,
     user: Arc<imd::IMDUser>,
     wordlist: Arc<String>,
 }
-
 
 impl Conf {
     pub fn init() -> Conf {
@@ -23,7 +21,9 @@ impl Conf {
 
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
-            let error = imd::report_bad("imd must be run with root permissions, please try running 'sudo!!'");
+            let error = imd::report_bad(
+                "imd must be run with root permissions, please try running 'sudo!!'",
+            );
             panic!("{error}")
         }
 
@@ -31,7 +31,8 @@ impl Conf {
         let mut machines: Vec<imd::TargetMachine> = vec![];
 
         // Get the target machines parsed as IP addresses
-        let ip_addresses: Vec<_> = matches.get_many::<String>("targets")
+        let ip_addresses: Vec<_> = matches
+            .get_many::<String>("targets")
             .unwrap()
             .map(|s| s.parse::<IpAddr>())
             .collect();
@@ -39,9 +40,7 @@ impl Conf {
         // Get the target names, or an empty vector if None
         let mut names: Vec<_> = match matches.get_many::<String>("names") {
             None => vec![],
-            Some(names) => names
-                .map(|s| Some(s.to_string()))
-                .collect(),
+            Some(names) => names.map(|s| Some(s.to_string())).collect(),
         };
 
         // Pad the names list with None until it's the same length as IP addresses
@@ -50,18 +49,11 @@ impl Conf {
         // Add all the valid IP addresses to the target machine list with the associates hostnames
         for (ip_address, name) in zip(ip_addresses, names) {
             match ip_address {
-                Ok(ip_address) => {
-                    machines.push(
-                        imd::TargetMachine::new(
-                            name,
-                            ip_address
-                        )
-                    )
-                },
+                Ok(ip_address) => machines.push(imd::TargetMachine::new(name, ip_address)),
                 Err(_) => {
                     let log = imd::report_bad("Oooops, an entered IP addresses wasn't actually an IP address, skipping it");
                     println!("{log}");
-                },
+                }
             }
         }
 
@@ -72,14 +64,10 @@ impl Conf {
         // Get the user ID from the username
         let (uid, gid) = match User::from_name(&name).unwrap() {
             Some(user) => (user.uid, user.gid),
-            _ => (Uid::from_raw(0), Gid::from_raw(0))
+            _ => (Uid::from_raw(0), Gid::from_raw(0)),
         };
 
-        let user = imd::IMDUser::new(
-            gid,
-            name,
-            uid
-        );
+        let user = imd::IMDUser::new(gid, name, uid);
 
         // Get the wordlist, which will either be the user-provided option or the default value
         let wordlist = matches.get_one::<String>("wordlist").unwrap().to_string();
@@ -103,9 +91,7 @@ impl Conf {
     pub fn wordlist(&self) -> &Arc<String> {
         &self.wordlist
     }
-
 }
-
 
 fn cli() -> Command<'static> {
     let app = Command::new(crate_name!())
@@ -123,7 +109,7 @@ fn cli() -> Command<'static> {
                 .multiple_values(true)
                 .value_hint(ValueHint::CommandString)
                 .required(true)
-                .help("Target machine(s)'s IP address(es)")
+                .help("Target machine(s)'s IP address(es)"),
         )
         .arg(
             Arg::new("names")
@@ -133,7 +119,7 @@ fn cli() -> Command<'static> {
                 .takes_value(true)
                 .multiple_values(true)
                 .value_hint(ValueHint::CommandString)
-                .help("Target machine(s)'s name(s)")
+                .help("Target machine(s)'s name(s)"),
         )
         .arg(
             Arg::new("wordlist")
@@ -143,7 +129,7 @@ fn cli() -> Command<'static> {
                 .takes_value(true)
                 .value_hint(ValueHint::FilePath)
                 .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
-                .help("Wordlist for web discovery")
+                .help("Wordlist for web discovery"),
         );
 
     app

@@ -1,9 +1,12 @@
 [package]
-name = "imd"
-version = "1.4.0"
 authors = ["Kevin Conley <koins@duck.com>"]
+description = "A discovery tool for CTF-style hacking challenges"
+documentation = "https://kmanc.github.io/intelligent_machine_discovery/"
 edition = "2021"
-description = "A fast discovery tool for CTF-style hacking challenges"
+license = "MIT"
+name = "imd"
+repository = "https://github.com/kmanc/intelligent_machine_discovery"
+version = "1.4.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

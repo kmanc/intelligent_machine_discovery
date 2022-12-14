@@ -16,7 +16,7 @@ pub fn dir_and_file_scan(
     let bar = bar_container.add(imd::make_new_bar());
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough'"));
+    let starter = imd::make_message_starter(ip_address, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough --time-limit 15m'"));
     let starter_clone = starter.clone();
 
     // Report that we are scanning for web directories and files
@@ -25,7 +25,7 @@ pub fn dir_and_file_scan(
     let full_location = format!("{protocol}://{web_location}:{port}");
 
     // Run the vuln scan and capture the output
-    let args = vec!["-q", "--thorough", "-w", wordlist, "-u", &full_location];
+    let args = vec!["-q", "--thorough", "--time-limit 15m", "-w", wordlist, "-u", &full_location];
     let command = imd::get_command_output("feroxbuster", args)?;
 
     // For some reason this output has double "\n" at the end of each line, so we fix that

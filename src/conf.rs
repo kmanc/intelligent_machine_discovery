@@ -93,20 +93,19 @@ impl Conf {
     }
 }
 
-fn cli() -> Command<'static> {
+fn cli() -> Command {
     let app = Command::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!());
 
-    let app = app
+    app
         .arg(
             Arg::new("targets")
                 .short('t')
                 .long("targets")
                 .value_name("IP_ADDRESS")
-                .takes_value(true)
-                .multiple_values(true)
+                .num_args(1..)
                 .value_hint(ValueHint::CommandString)
                 .required(true)
                 .help("Target machine(s)'s IP address(es)"),
@@ -116,8 +115,7 @@ fn cli() -> Command<'static> {
                 .short('n')
                 .long("names")
                 .value_name("NAME")
-                .takes_value(true)
-                .multiple_values(true)
+                .num_args(1..)
                 .value_hint(ValueHint::CommandString)
                 .help("Target machine(s)'s name(s)"),
         )
@@ -126,11 +124,9 @@ fn cli() -> Command<'static> {
                 .short('w')
                 .long("wordlist")
                 .value_name("WORDLIST")
-                .takes_value(true)
+                .num_args(1)
                 .value_hint(ValueHint::FilePath)
                 .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
                 .help("Wordlist for web discovery"),
-        );
-
-    app
+        )
 }

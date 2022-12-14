@@ -55,8 +55,7 @@ fn discovery(
 ) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
     match ping::verify_connection(bar_container.clone(), &ip_address) {
-        Err(_) => return Err("Connection".into()),
-        Ok(imd::PingResult::Bad) => return Err("Connection".into()),
+        Err(_) | Ok(imd::PingResult::Bad) => return Err("Connection".into()),
         Ok(imd::PingResult::Good) => {}
     }
 

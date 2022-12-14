@@ -99,7 +99,7 @@ fn cli() -> Command {
         .author(crate_authors!())
         .about(crate_description!());
 
-    let app = app
+    app
         .arg(
             Arg::new("targets")
                 .short('t')
@@ -128,7 +128,5 @@ fn cli() -> Command {
                 .value_hint(ValueHint::FilePath)
                 .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
                 .help("Wordlist for web discovery"),
-        );
-
-    app
+        )
 }

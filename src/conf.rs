@@ -21,7 +21,8 @@ impl Conf {
 
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
-            let error = imd::report_bad(
+            let error = imd::report(
+                IMDOutcome::Bad,
                 "imd must be run with root permissions, please try running 'sudo!!'",
             );
             panic!("{error}")
@@ -51,7 +52,10 @@ impl Conf {
             match ip_address {
                 Ok(ip_address) => machines.push(imd::TargetMachine::new(name, ip_address)),
                 Err(_) => {
-                    let log = imd::report_bad("Oooops, an entered IP addresses wasn't actually an IP address, skipping it");
+                    let log = imd::report(
+                        IMDOutcome::Bad,
+                        "Oooops, an entered IP addresses wasn't actually an IP address, skipping it"
+                    );
                     println!("{log}");
                 }
             }

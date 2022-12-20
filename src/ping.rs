@@ -21,13 +21,13 @@ pub fn verify_connection(
     let command = imd::get_command_output("ping", args)?;
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
-        let output = imd::report_bad("Machine could not be reached");
+        let output = imd::report(IMDOutcome::Bad, "Machine could not be reached");
         bar.finish_with_message(format!("{starter_clone}{output}"));
         return Ok(imd::PingResult::Bad);
     }
 
     // Report that we were successful in verifying the connection
-    let output = imd::report_good("Done");
+    let output = imd::report(IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(imd::PingResult::Good)

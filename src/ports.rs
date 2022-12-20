@@ -31,7 +31,7 @@ pub fn all_tcp_ports(
     writeln!(f, "{command}")?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report_good("Done");
+    let output = imd::report(IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
@@ -76,7 +76,7 @@ pub fn common_tcp_ports(
     writeln!(f, "{command}")?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report_good("Done");
+    let output = imd::report(IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(command)

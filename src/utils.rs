@@ -27,7 +27,7 @@ pub fn add_to_etc_hosts(
         let line = line?;
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
         if line.contains(ip_address) && line.contains(hostname) {
-            let output = imd::report_neutral("Entry already in /etc/hosts, skipping");
+            let output = imd::report(IMDOutcome::Neutral, "Entry already in /etc/hosts, skipping");
             bar.finish_with_message(format!("{starter_clone}{output}"));
             return Ok(());
         }
@@ -39,7 +39,7 @@ pub fn add_to_etc_hosts(
     writeln!(&host_file, "{} {}", ip_address, hostname)?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report_good("Done");
+    let output = imd::report(IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
@@ -62,7 +62,7 @@ pub fn create_dir(
 
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
     if fs::create_dir(ip_address).is_err() {
-        let output = imd::report_neutral("Directory already exists, skipping");
+        let output = imd::report(IMDOutcome::Neutral, "Directory already exists, skipping");
         bar.finish_with_message(format!("{starter_clone}{output}"));
         return Ok(());
     }
@@ -71,7 +71,7 @@ pub fn create_dir(
     imd::change_owner(ip_address, user)?;
 
     // Report that we were successful in creating the results directory
-    let output = imd::report_good("Done");
+    let output = imd::report(IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
@@ -125,7 +125,7 @@ pub fn parse_port_scan(
     }
 
     // Report that we were successful in parsing the port scan
-    let output = imd::report_good("Done");
+    let output = imd::report(IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     services_map

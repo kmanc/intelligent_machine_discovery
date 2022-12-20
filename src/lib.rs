@@ -70,13 +70,13 @@ impl IMDUser {
     }
 }
 
-pub struct TEST {
-    bar_container,
-    user,
-    ip_address,
-    hostname,
-    wordlist,
-}
+/*pub struct TEST {
+    bar_container: String,
+    user: String,
+    ip_address: String,
+    hostname: String,
+    wordlist: String,
+}*/
 
 pub fn change_owner(object: &str, new_owner: Arc<IMDUser>) -> Result<(), Box<dyn Error>> {
     chown(object, Some(*new_owner.uid()), Some(*new_owner.gid()))?;
@@ -125,13 +125,13 @@ pub fn make_message_starter(ip_address: &str, content: &str) -> String {
 pub fn report (outcome: IMDOutcome, text: &str) -> String {
     let (text, color) = match outcome {
         IMDOutcome::Bad => {
-            format!("✕ {text}"), Color::Red
+            (format!("✕ {text}"), Color::Red)
         },
         IMDOutcome::Good => {
-            format!("✔️ {text}"), Color::Green
+            (format!("✔️ {text}"), Color::Green)
         },
         IMDOutcome::Neutral => {
-            format!("~ {text}"), Color::Yellow
+            (format!("~ {text}"), Color::Yellow)
         },
     };
     color_text(&text, color).to_string()

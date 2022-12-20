@@ -33,7 +33,7 @@ pub fn network_drives(
     writeln!(f, "{command}")?;
 
     // Report that we completed the network drive scan
-    let output = imd::report(IMDOutcome::Good, "Done");
+    let output = imd::report(imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())

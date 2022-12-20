@@ -39,7 +39,7 @@ pub fn dir_and_file_scan(
     writeln!(f, "{command}")?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(IMDOutcome::Good, "Done");
+    let output = imd::report(imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
@@ -80,7 +80,7 @@ pub fn vuln_scan(
     writeln!(f, "{command}")?;
 
     // Report that we completed the web vuln scan
-    let output = imd::report(IMDOutcome::Good, "Done");
+    let output = imd::report(imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())

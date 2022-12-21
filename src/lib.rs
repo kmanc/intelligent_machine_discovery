@@ -173,7 +173,7 @@ pub fn make_message_starter(ip_address: &str, content: &str) -> String {
     format!("{formatted_ip}{content} ")
 }
 
-pub fn report(outcome: IMDOutcome, text: &str) -> String {
+pub fn report(outcome: &IMDOutcome, text: &str) -> String {
     let (text, color) = match outcome {
         IMDOutcome::Bad => (format!("✕ {text}"), Color::Red),
         IMDOutcome::Good => (format!("✔️ {text}"), Color::Green),

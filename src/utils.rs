@@ -4,7 +4,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
-pub fn add_to_etc_hosts(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
@@ -26,7 +26,7 @@ pub fn add_to_etc_hosts(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
         if line.contains(args_bundle.ip_address()) && line.contains(hostname) {
             let output = imd::report(
-                imd::IMDOutcome::Neutral,
+                &imd::IMDOutcome::Neutral,
                 "Entry already in /etc/hosts, skipping",
             );
             bar.finish_with_message(format!("{starter_clone}{output}"));
@@ -37,16 +37,16 @@ pub fn add_to_etc_hosts(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<
     // If we didn't already return, add the entry to the /etc/hosts file because it wasn't there
     let host_file = OpenOptions::new().append(true).open("/etc/hosts")?;
 
-    writeln!(&host_file, "{} {}", args_bundle.ip_address(), hostname)?;
+    writeln!(&host_file, "{} {hostname}", args_bundle.ip_address())?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }
 
-pub fn create_dir(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
@@ -63,7 +63,7 @@ pub fn create_dir(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Er
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
     if fs::create_dir(args_bundle.ip_address()).is_err() {
         let output = imd::report(
-            imd::IMDOutcome::Neutral,
+            &imd::IMDOutcome::Neutral,
             "Directory already exists, skipping",
         );
         bar.finish_with_message(format!("{starter_clone}{output}"));
@@ -74,15 +74,15 @@ pub fn create_dir(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Er
     imd::change_owner(args_bundle.ip_address(), args_bundle.user())?;
 
     // Report that we were successful in creating the results directory
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }
 
 pub fn parse_port_scan(
-    args_bundle: Arc<imd::DiscoveryArgs>,
-    port_scan: String,
+    args_bundle: &Arc<imd::DiscoveryArgs>,
+    port_scan: &str,
 ) -> HashMap<String, Vec<String>> {
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
@@ -129,7 +129,7 @@ pub fn parse_port_scan(
     }
 
     // Report that we were successful in parsing the port scan
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     services_map

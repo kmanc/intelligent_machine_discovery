@@ -22,7 +22,7 @@ impl Conf {
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
             let error = imd::report(
-                imd::IMDOutcome::Bad,
+                &imd::IMDOutcome::Bad,
                 "imd must be run with root permissions, please try running 'sudo!!'",
             );
             panic!("{error}")
@@ -49,30 +49,27 @@ impl Conf {
 
         // Add all the valid IP addresses to the target machine list with the associates hostnames
         for (ip_address, name) in zip(ip_addresses, names) {
-            match ip_address {
-                Ok(ip_address) => {
-                    // If the target machine has a hostname, set it as the target for future web scans (if there are any)
-                    // Otherwise use the IP address for web scans
-                    match name {
-                        Some(name) => machines.push(imd::TargetMachine::new(
-                            Some(name.clone()),
-                            ip_address,
-                            name,
-                        )),
-                        None => machines.push(imd::TargetMachine::new(
-                            None,
-                            ip_address,
-                            ip_address.to_string(),
-                        )),
-                    };
-                }
-                Err(_) => {
-                    let log = imd::report(
-                        imd::IMDOutcome::Bad,
-                        "Oooops, an entered IP addresses wasn't actually an IP address, skipping it"
-                    );
-                    println!("{log}");
-                }
+            if let Ok(ip_address) = ip_address {
+                // If the target machine has a hostname, set it as the target for future web scans (if there are any)
+                // Otherwise use the IP address for web scans
+                match name {
+                    Some(name) => machines.push(imd::TargetMachine::new(
+                        Some(name.clone()),
+                        ip_address,
+                        name,
+                    )),
+                    None => machines.push(imd::TargetMachine::new(
+                        None,
+                        ip_address,
+                        ip_address.to_string(),
+                    )),
+                };
+            } else {
+                let log = imd::report(
+                    &imd::IMDOutcome::Bad,
+                    "Oooops, an entered IP addresses wasn't actually an IP address, skipping it",
+                );
+                println!("{log}");
             }
         }
 

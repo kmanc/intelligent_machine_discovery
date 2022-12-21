@@ -2,7 +2,7 @@ use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
-pub fn all_tcp_ports(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
@@ -28,13 +28,13 @@ pub fn all_tcp_ports(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn
     writeln!(f, "{command}")?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(())
 }
 
-pub fn common_tcp_ports(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<String, Box<dyn Error>> {
+pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<String, Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
@@ -69,7 +69,7 @@ pub fn common_tcp_ports(args_bundle: Arc<imd::DiscoveryArgs>) -> Result<String, 
     writeln!(f, "{command}")?;
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(command)

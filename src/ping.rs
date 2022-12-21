@@ -2,7 +2,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 pub fn verify_connection(
-    args_bundle: Arc<imd::DiscoveryArgs>,
+    args_bundle: &Arc<imd::DiscoveryArgs>,
 ) -> Result<imd::PingResult, Box<dyn Error>> {
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
@@ -19,13 +19,13 @@ pub fn verify_connection(
     let command = imd::get_command_output("ping", args)?;
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
-        let output = imd::report(imd::IMDOutcome::Bad, "Machine could not be reached");
+        let output = imd::report(&imd::IMDOutcome::Bad, "Machine could not be reached");
         bar.finish_with_message(format!("{starter_clone}{output}"));
         return Ok(imd::PingResult::Bad);
     }
 
     // Report that we were successful in verifying the connection
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter_clone}{output}"));
 
     Ok(imd::PingResult::Good)

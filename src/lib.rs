@@ -1,11 +1,10 @@
 use crossterm::style::{StyledContent, Stylize};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nix::unistd::{chown, Gid, Uid};
 use std::error::Error;
 use std::fs::File;
 use std::net::IpAddr;
 use std::process::Command;
-use std::sync::Arc;
 
 enum Color {
     Green,
@@ -27,6 +26,7 @@ pub enum PingResult {
 pub struct TargetMachine {
     hostname: Option<String>,
     ip_address: IpAddr,
+    web_target: String,
 }
 
 impl TargetMachine {
@@ -38,14 +38,20 @@ impl TargetMachine {
         &self.ip_address
     }
 
-    pub fn new(hostname: Option<String>, ip_address: IpAddr) -> TargetMachine {
+    pub fn new(hostname: Option<String>, ip_address: IpAddr, web_target: String) -> TargetMachine {
         TargetMachine {
             hostname,
             ip_address,
+            web_target,
         }
+    }
+
+    pub fn web_target(&self) -> &String {
+        &self.web_target
     }
 }
 
+#[derive(Clone)]
 pub struct IMDUser {
     gid: Gid,
     name: String,
@@ -70,20 +76,65 @@ impl IMDUser {
     }
 }
 
-/*pub struct TEST {
-    bar_container: String,
-    user: String,
+pub struct DiscoveryArgs {
+    bars_container: MultiProgress,
+    hostname: Option<String>,
     ip_address: String,
-    hostname: String,
+    user: IMDUser,
+    web_target: String,
     wordlist: String,
-}*/
+}
 
-pub fn change_owner(object: &str, new_owner: Arc<IMDUser>) -> Result<(), Box<dyn Error>> {
+impl DiscoveryArgs {
+    pub fn bars_container(&self) -> &MultiProgress {
+        &self.bars_container
+    }
+
+    pub fn hostname(&self) -> &Option<String> {
+        &self.hostname
+    }
+
+    pub fn ip_address(&self) -> &String {
+        &self.ip_address
+    }
+
+    pub fn new(
+        bars_container: MultiProgress,
+        hostname: Option<String>,
+        ip_address: String,
+        user: IMDUser,
+        web_target: String,
+        wordlist: String,
+    ) -> DiscoveryArgs {
+        DiscoveryArgs {
+            bars_container,
+            hostname,
+            ip_address,
+            user,
+            web_target,
+            wordlist,
+        }
+    }
+
+    pub fn user(&self) -> &IMDUser {
+        &self.user
+    }
+
+    pub fn web_target(&self) -> &String {
+        &self.web_target
+    }
+
+    pub fn wordlist(&self) -> &String {
+        &self.wordlist
+    }
+}
+
+pub fn change_owner(object: &str, new_owner: &IMDUser) -> Result<(), Box<dyn Error>> {
     chown(object, Some(*new_owner.uid()), Some(*new_owner.gid()))?;
     Ok(())
 }
 
-pub fn create_file(user: Arc<IMDUser>, filename: &str) -> Result<File, Box<dyn Error>> {
+pub fn create_file(user: &IMDUser, filename: &str) -> Result<File, Box<dyn Error>> {
     // Create the desired file
     let f = File::create(filename)?;
 
@@ -122,17 +173,11 @@ pub fn make_message_starter(ip_address: &str, content: &str) -> String {
     format!("{formatted_ip}{content} ")
 }
 
-pub fn report (outcome: IMDOutcome, text: &str) -> String {
+pub fn report(outcome: IMDOutcome, text: &str) -> String {
     let (text, color) = match outcome {
-        IMDOutcome::Bad => {
-            (format!("✕ {text}"), Color::Red)
-        },
-        IMDOutcome::Good => {
-            (format!("✔️ {text}"), Color::Green)
-        },
-        IMDOutcome::Neutral => {
-            (format!("~ {text}"), Color::Yellow)
-        },
+        IMDOutcome::Bad => (format!("✕ {text}"), Color::Red),
+        IMDOutcome::Good => (format!("✔️ {text}"), Color::Green),
+        IMDOutcome::Neutral => (format!("~ {text}"), Color::Yellow),
     };
     color_text(&text, color).to_string()
 }

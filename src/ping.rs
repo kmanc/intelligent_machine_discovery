@@ -12,10 +12,9 @@ pub fn verify_connection(
 
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(ip_string, "Verifying connectivity");
-    let starter_clone = starter.clone();
 
     // Report that we are verifying connectivity
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Run the ping command and capture the output
     let args = vec!["-c", "4", ip_string];
@@ -23,13 +22,13 @@ pub fn verify_connection(
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
         let output = imd::report(&imd::IMDOutcome::Bad, "Machine could not be reached");
-        bar.finish_with_message(format!("{starter_clone}{output}"));
+        bar.finish_with_message(format!("{starter}{output}"));
         return Ok(imd::PingResult::Bad);
     }
 
     // Report that we were successful in verifying the connection
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(imd::PingResult::Good)
 }

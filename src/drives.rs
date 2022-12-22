@@ -14,10 +14,9 @@ pub fn network_drives(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<d
         ip_string,
         "Scanning for network drives using 'showmount -e'",
     );
-    let starter_clone = starter.clone();
 
     // Report that we are scanning for NFS shares
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Run the showmount command and capture the output
     let args = vec!["-e", ip_string];
@@ -32,7 +31,7 @@ pub fn network_drives(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<d
 
     // Report that we completed the network drive scan
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(())
 }

@@ -16,10 +16,9 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
 
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(ip_string, "Adding to /etc/hosts");
-    let starter_clone = starter.clone();
 
     // Report that we are adding the machine to /etc/hosts
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Open the /etc/hosts files and read it line by line
     let host_file = File::open("/etc/hosts")?;
@@ -32,7 +31,7 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
                 &imd::IMDOutcome::Neutral,
                 "Entry already in /etc/hosts, skipping",
             );
-            bar.finish_with_message(format!("{starter_clone}{output}"));
+            bar.finish_with_message(format!("{starter}{output}"));
             return Ok(());
         }
     }
@@ -44,7 +43,7 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(())
 }
@@ -57,14 +56,10 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(
-        ip_string,
-        "Creating directory to store results in",
-    );
-    let starter_clone = starter.clone();
+    let starter = imd::make_message_starter(ip_string, "Creating directory to store results in");
 
     // Report that we are creating a dir for the results
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
     if fs::create_dir(ip_string).is_err() {
@@ -72,7 +67,7 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
             &imd::IMDOutcome::Neutral,
             "Directory already exists, skipping",
         );
-        bar.finish_with_message(format!("{starter_clone}{output}"));
+        bar.finish_with_message(format!("{starter}{output}"));
         return Ok(());
     }
 
@@ -81,7 +76,7 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
 
     // Report that we were successful in creating the results directory
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(())
 }
@@ -97,14 +92,10 @@ pub fn parse_port_scan(
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(
-        ip_string,
-        "Parsing port scan to determine next steps",
-    );
-    let starter_clone = starter.clone();
+    let starter = imd::make_message_starter(ip_string, "Parsing port scan to determine next steps");
 
     // Report that we are parsing the port scan
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Prep the scan string for searching by splitting it to a vector of lines, trimming each line, and removing lines that start with "|" or "SF:"
     let port_scan: Vec<String> = port_scan
@@ -139,7 +130,7 @@ pub fn parse_port_scan(
 
     // Report that we were successful in parsing the port scan
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     services_map
 }

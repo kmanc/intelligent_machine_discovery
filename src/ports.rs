@@ -10,14 +10,11 @@ pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dy
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(
-        ip_string,
-        "Scanning all TCP ports using 'nmap -p- -Pn'",
-    );
-    let starter_clone = starter.clone();
+    let starter =
+        imd::make_message_starter(ip_string, "Scanning all TCP ports using 'nmap -p- -Pn'");
 
     // Report that we are scanning all TCP ports
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Run the port scan and capture the output
     let args = vec!["-p-", "-Pn", ip_string];
@@ -32,7 +29,7 @@ pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dy
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(())
 }
@@ -46,10 +43,9 @@ pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<String,
 
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(ip_string, "Scanning common TCP ports for services with 'nmap -sV -Pn --script http-robots.txt --script http-title --script ssl-cert --script ftp-anon'");
-    let starter_clone = starter.clone();
 
     // Report that we are scanning all common TCP ports
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Run the port scan and capture the output
     let args = vec![
@@ -76,7 +72,7 @@ pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<String,
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(command)
 }

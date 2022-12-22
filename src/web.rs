@@ -14,10 +14,9 @@ pub fn dir_and_file_scan(
 
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(ip_string, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough --time-limit 10m'"));
-    let starter_clone = starter.clone();
 
     // Report that we are scanning for web directories and files
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     let full_location = format!("{protocol}://{}:{port}", args_bundle.machine().web_target());
 
@@ -39,10 +38,7 @@ pub fn dir_and_file_scan(
     let command = command.replace("\n\n", "\n");
 
     // Create a file for the results
-    let output_file = format!(
-        "{}/web_dirs_and_files_port_{port}",
-        ip_string
-    );
+    let output_file = format!("{}/web_dirs_and_files_port_{port}", ip_string);
     let mut f = imd::create_file(args_bundle.user(), &output_file)?;
 
     // Write the command output to the file
@@ -50,7 +46,7 @@ pub fn dir_and_file_scan(
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(())
 }
@@ -70,10 +66,9 @@ pub fn vuln_scan(
         ip_string,
         &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host -maxtime 60'"),
     );
-    let starter_clone = starter.clone();
 
     // Report that we are scanning for web vulnerabilities
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     let full_location = format!("{protocol}://{}:{port}", args_bundle.machine().web_target());
 
@@ -90,7 +85,7 @@ pub fn vuln_scan(
 
     // Report that we completed the web vuln scan
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    bar.finish_with_message(format!("{starter}{output}"));
 
     Ok(())
 }

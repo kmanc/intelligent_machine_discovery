@@ -72,8 +72,6 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }));
 
-    /*
-
     // Scan NFS server on the machine
     threads.push(thread::spawn({
         let args_bundle = args_bundle.clone();
@@ -81,6 +79,8 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
             if drives::network_drives(&args_bundle).is_err() {}
         }
     }));
+
+    /*
 
     // Scan common TCP ports and perform service discovery
     let port_scan = match ports::common_tcp_ports(&args_bundle.clone()) {

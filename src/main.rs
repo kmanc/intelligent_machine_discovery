@@ -17,7 +17,7 @@ fn main() {
 
 fn post_main(conf: &conf::Conf) {
     // Create multiprogress bar to house all of the individual bars that update status
-    let bars_container = Arc::new(MultiProgress::new());
+    let bars_container = MultiProgress::new();
 
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
@@ -33,7 +33,7 @@ fn post_main(conf: &conf::Conf) {
         let discovery_args = Arc::new(discovery_args);
         threads.push(thread::spawn({
             move || {
-                if discovery(&discovery_args.clone()).is_err() {}
+                if discovery(&discovery_args).is_err() {}
             }
         }));
     }
@@ -48,18 +48,18 @@ fn post_main(conf: &conf::Conf) {
 
 fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    match ping::verify_connection(&args_bundle.clone()) {
+    match ping::verify_connection(&args_bundle) {
         Err(_) | Ok(imd::PingResult::Bad) => return Err("Connection".into()),
         Ok(imd::PingResult::Good) => {}
     }
 
     // If the target machine has a hostname, add it to the /etc/hosts file
     if args_bundle.machine().hostname().is_some() {
-        utils::add_to_etc_hosts(&args_bundle.clone()).unwrap();
+        utils::add_to_etc_hosts(&args_bundle).unwrap();
     };
 
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(&args_bundle.clone())?;
+    utils::create_dir(&args_bundle)?;
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];

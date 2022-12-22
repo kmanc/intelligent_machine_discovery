@@ -61,8 +61,6 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
     // Create a landing space for all of the files that results will get written to
     utils::create_dir(&args_bundle)?;
 
-    /*
-
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
 
@@ -73,6 +71,8 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
             if ports::all_tcp_ports(&args_bundle).is_err() {}
         }
     }));
+
+    /*
 
     // Scan NFS server on the machine
     threads.push(thread::spawn({

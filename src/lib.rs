@@ -86,7 +86,7 @@ pub struct DiscoveryArgs {
 }
 
 impl DiscoveryArgs {
-    pub fn bars_container(&self) -> &MultiProgress {
+    pub fn bars_container(&self) -> &Arc<MultiProgress> {
         &self.bars_container
     }
 

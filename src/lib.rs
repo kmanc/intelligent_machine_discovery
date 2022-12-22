@@ -23,6 +23,7 @@ pub enum PingResult {
     Bad,
 }
 
+#[derive(Clone)]
 pub struct TargetMachine {
     hostname: Option<String>,
     ip_address: IpAddr,
@@ -78,10 +79,8 @@ impl IMDUser {
 
 pub struct DiscoveryArgs {
     bars_container: MultiProgress,
-    hostname: Option<String>,
-    ip_address: String,
+    machine: TargetMachine,
     user: IMDUser,
-    web_target: String,
     wordlist: String,
 }
 
@@ -90,38 +89,26 @@ impl DiscoveryArgs {
         &self.bars_container
     }
 
-    pub fn hostname(&self) -> &Option<String> {
-        &self.hostname
-    }
-
-    pub fn ip_address(&self) -> &String {
-        &self.ip_address
+    pub fn machine(&self) -> &TargetMachine {
+        &self.machine
     }
 
     pub fn new(
         bars_container: MultiProgress,
-        hostname: Option<String>,
-        ip_address: String,
+        machine: TargetMachine,
         user: IMDUser,
-        web_target: String,
         wordlist: String,
     ) -> DiscoveryArgs {
         DiscoveryArgs {
             bars_container,
-            hostname,
-            ip_address,
+            machine,
             user,
-            web_target,
             wordlist,
         }
     }
 
     pub fn user(&self) -> &IMDUser {
         &self.user
-    }
-
-    pub fn web_target(&self) -> &String {
-        &self.web_target
     }
 
     pub fn wordlist(&self) -> &String {

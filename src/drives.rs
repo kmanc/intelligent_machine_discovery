@@ -6,9 +6,12 @@ pub fn network_drives(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<d
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
+
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(
-        args_bundle.ip_address(),
+        ip_string,
         "Scanning for network drives using 'showmount -e'",
     );
     let starter_clone = starter.clone();
@@ -17,11 +20,11 @@ pub fn network_drives(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<d
     bar.set_message(starter);
 
     // Run the showmount command and capture the output
-    let args = vec!["-e", args_bundle.ip_address()];
+    let args = vec!["-e", ip_string];
     let command = imd::get_command_output("showmount", args)?;
 
     // Create a file for the results
-    let output_file = format!("{}/nfs_shares", args_bundle.ip_address());
+    let output_file = format!("{}/nfs_shares", ip_string);
     let mut f = imd::create_file(args_bundle.user(), &output_file)?;
 
     // Write the command output to the file

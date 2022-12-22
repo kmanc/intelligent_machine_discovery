@@ -9,10 +9,13 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
     // Unwrap the hostname, which we know has a value otherwise this function would not have been called
-    let hostname = args_bundle.hostname().as_ref().unwrap();
+    let hostname = args_bundle.machine().hostname().as_ref().unwrap();
+
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(args_bundle.ip_address(), "Adding to /etc/hosts");
+    let starter = imd::make_message_starter(ip_string, "Adding to /etc/hosts");
     let starter_clone = starter.clone();
 
     // Report that we are adding the machine to /etc/hosts
@@ -24,7 +27,7 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
     for line in reader.lines() {
         let line = line?;
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
-        if line.contains(args_bundle.ip_address()) && line.contains(hostname) {
+        if line.contains(ip_string) && line.contains(hostname) {
             let output = imd::report(
                 &imd::IMDOutcome::Neutral,
                 "Entry already in /etc/hosts, skipping",
@@ -37,7 +40,7 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
     // If we didn't already return, add the entry to the /etc/hosts file because it wasn't there
     let host_file = OpenOptions::new().append(true).open("/etc/hosts")?;
 
-    writeln!(&host_file, "{} {hostname}", args_bundle.ip_address())?;
+    writeln!(&host_file, "{} {hostname}", ip_string)?;
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
@@ -50,9 +53,12 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
+
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(
-        args_bundle.ip_address(),
+        ip_string,
         "Creating directory to store results in",
     );
     let starter_clone = starter.clone();
@@ -61,7 +67,7 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
     bar.set_message(starter);
 
     // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
-    if fs::create_dir(args_bundle.ip_address()).is_err() {
+    if fs::create_dir(ip_string).is_err() {
         let output = imd::report(
             &imd::IMDOutcome::Neutral,
             "Directory already exists, skipping",
@@ -71,7 +77,7 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
     }
 
     // Change ownership of the directory to the logged in user from Args
-    imd::change_owner(args_bundle.ip_address(), args_bundle.user())?;
+    imd::change_owner(ip_string, args_bundle.user())?;
 
     // Report that we were successful in creating the results directory
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
@@ -87,9 +93,12 @@ pub fn parse_port_scan(
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
+
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(
-        args_bundle.ip_address(),
+        ip_string,
         "Parsing port scan to determine next steps",
     );
     let starter_clone = starter.clone();

@@ -10,14 +10,16 @@ pub fn dir_and_file_scan(
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
+    let ip_string = &args_bundle.machine().ip_address().to_string();
+
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(args_bundle.ip_address(), &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough --time-limit 10m'"));
+    let starter = imd::make_message_starter(ip_string, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough --time-limit 10m'"));
     let starter_clone = starter.clone();
 
     // Report that we are scanning for web directories and files
     bar.set_message(starter);
 
-    let full_location = format!("{protocol}://{}:{port}", args_bundle.web_target());
+    let full_location = format!("{protocol}://{}:{port}", args_bundle.machine().web_target());
 
     // Run the vuln scan and capture the output
     let args = vec![
@@ -39,7 +41,7 @@ pub fn dir_and_file_scan(
     // Create a file for the results
     let output_file = format!(
         "{}/web_dirs_and_files_port_{port}",
-        args_bundle.ip_address()
+        ip_string
     );
     let mut f = imd::create_file(args_bundle.user(), &output_file)?;
 
@@ -61,9 +63,11 @@ pub fn vuln_scan(
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
+    let ip_string = &args_bundle.machine().ip_address().to_string();
+
     // All messages logged will start with the same thing so create it once up front
     let starter = imd::make_message_starter(
-        args_bundle.ip_address(),
+        ip_string,
         &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host -maxtime 60'"),
     );
     let starter_clone = starter.clone();
@@ -71,14 +75,14 @@ pub fn vuln_scan(
     // Report that we are scanning for web vulnerabilities
     bar.set_message(starter);
 
-    let full_location = format!("{protocol}://{}:{port}", args_bundle.web_target());
+    let full_location = format!("{protocol}://{}:{port}", args_bundle.machine().web_target());
 
     // Run the vuln scan and capture the output
     let args = vec!["-host", &full_location, "-maxtime", "60"];
     let command = imd::get_command_output("nikto", args)?;
 
     // Create a file for the results
-    let output_file = format!("{}/web_vulns_port_{port}", args_bundle.ip_address());
+    let output_file = format!("{}/web_vulns_port_{port}", ip_string);
     let mut f = imd::create_file(args_bundle.user(), &output_file)?;
 
     // Write the command output to the file

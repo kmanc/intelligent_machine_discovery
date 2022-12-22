@@ -23,10 +23,8 @@ fn post_main(conf: &conf::Conf) {
     for machine in conf.machines().iter() {
         let discovery_args = imd::DiscoveryArgs::new(
             MultiProgress::new(),
-            machine.hostname().clone(),
-            machine.ip_address().to_string(),
+            machine.clone(),
             conf.user(),
-            machine.web_target().to_string(),
             conf.wordlist().to_string(),
         );
         let discovery_args = Arc::new(discovery_args);
@@ -53,7 +51,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
     }
 
     // If the target machine has a hostname, add it to the /etc/hosts file
-    if args_bundle.hostname().is_some() {
+    if args_bundle.machine().hostname().is_some() {
         utils::add_to_etc_hosts(&args_bundle.clone()).unwrap();
     };
 

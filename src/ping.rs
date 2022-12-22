@@ -7,15 +7,18 @@ pub fn verify_connection(
     // Create a bar for messaging progress
     let bar = args_bundle.bars_container().add(imd::make_new_bar());
 
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
+
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(args_bundle.ip_address(), "Verifying connectivity");
+    let starter = imd::make_message_starter(ip_string, "Verifying connectivity");
     let starter_clone = starter.clone();
 
     // Report that we are verifying connectivity
     bar.set_message(starter);
 
     // Run the ping command and capture the output
-    let args = vec!["-c", "4", args_bundle.ip_address()];
+    let args = vec!["-c", "4", ip_string];
     let command = imd::get_command_output("ping", args)?;
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {

@@ -86,8 +86,8 @@ pub struct DiscoveryArgs {
 }
 
 impl DiscoveryArgs {
-    pub fn bars_container(&self) -> &Arc<MultiProgress> {
-        &self.bars_container
+    pub fn bars_container(&self) -> Arc<MultiProgress> {
+        self.bars_container.clone()
     }
 
     pub fn machine(&self) -> &TargetMachine {

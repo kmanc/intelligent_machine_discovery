@@ -16,13 +16,16 @@ fn main() {
 }
 
 fn post_main(conf: &conf::Conf) {
+    // Create multiprogress bar to house all of the individual bars that update status
+    let bars_container = MultiProgress::new();
+
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
 
     // Run the discovery function on each of the target machines in its own thread
     for machine in conf.machines().iter() {
         let discovery_args = imd::DiscoveryArgs::new(
-            MultiProgress::new(),
+            bars_container.clone(),
             machine.clone(),
             conf.user(),
             conf.wordlist().to_string(),

@@ -17,7 +17,7 @@ fn main() {
 
 fn post_main(conf: &conf::Conf) {
     // Create multiprogress bar to house all of the individual bars that update status
-    let bars_container = MultiProgress::new();
+    let bars_container = Arc::new(MultiProgress::new());
 
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];

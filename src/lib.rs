@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fs::File;
 use std::net::IpAddr;
 use std::process::Command;
+use std::sync::Arc;
 
 enum Color {
     Green,
@@ -78,7 +79,7 @@ impl IMDUser {
 }
 
 pub struct DiscoveryArgs {
-    bars_container: MultiProgress,
+    bars_container: Arc<MultiProgress>,
     machine: TargetMachine,
     user: IMDUser,
     wordlist: String,
@@ -94,7 +95,7 @@ impl DiscoveryArgs {
     }
 
     pub fn new(
-        bars_container: MultiProgress,
+        bars_container: Arc<MultiProgress>,
         machine: TargetMachine,
         user: IMDUser,
         wordlist: String,

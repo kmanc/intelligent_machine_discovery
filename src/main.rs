@@ -80,13 +80,13 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }));
 
-    /*
-
     // Scan common TCP ports and perform service discovery
     let port_scan = match ports::common_tcp_ports(&args_bundle.clone()) {
         Ok(port_scan) => port_scan,
         Err(_) => return Err("Common TCP port scan".into()),
     };
+
+    /*
 
     // Parse the port scan to determine which services are running and where
     let services = utils::parse_port_scan(&args_bundle.clone(), &port_scan);

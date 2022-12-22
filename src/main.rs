@@ -33,7 +33,7 @@ fn post_main(conf: &conf::Conf) {
         let discovery_args = Arc::new(discovery_args);
         threads.push(thread::spawn({
             move || {
-                if discovery(&discovery_args).is_err() {}
+                if discovery(&discovery_args.clone()).is_err() {}
             }
         }));
     }

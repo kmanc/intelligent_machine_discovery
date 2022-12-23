@@ -68,7 +68,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
     threads.push(thread::spawn({
         let args_bundle = args_bundle.clone();
         move || {
-            if ports::all_tcp_ports(&args_bundle).is_err() {println!("PROBLEM")}
+            if ports::all_tcp_ports(&args_bundle).is_err() {}
         }
     }));
 
@@ -80,6 +80,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }));
 
+    /*
 
     // Scan common TCP ports and perform service discovery
     let port_scan = match ports::common_tcp_ports(&args_bundle.clone()) {

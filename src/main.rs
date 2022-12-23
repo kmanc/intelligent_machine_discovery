@@ -43,7 +43,7 @@ fn post_main(conf: &conf::Conf) {
         thread.join().unwrap();
     }
 
-    println!("Discovery completed for all target machines");
+    bars_container.println("Discovery completed for all target machines").unwrap();
 }
 
 fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {

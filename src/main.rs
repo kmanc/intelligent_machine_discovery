@@ -43,7 +43,6 @@ fn post_main(conf: &conf::Conf) {
         thread.join().unwrap();
     }
 
-    bars_container.clear().unwrap();
     println!("Discovery completed for all target machines");
 }
 
@@ -73,6 +72,8 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }));
 
+    /*
+
     // Scan NFS server on the machine
     threads.push(thread::spawn({
         let args_bundle = args_bundle.clone();
@@ -81,7 +82,6 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }));
 
-    /*
 
     // Scan common TCP ports and perform service discovery
     let port_scan = match ports::common_tcp_ports(&args_bundle.clone()) {

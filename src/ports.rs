@@ -10,8 +10,7 @@ pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dy
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter =
-        imd::make_message_starter(ip_string, "Scanning all TCP ports using 'nmap -p- -Pn'");
+    let starter = imd::make_message_starter(ip_string, "Scanning all TCP ports using 'nmap -p- -Pn'");
 
     // Report that we are scanning all TCP ports
     bar.set_message(starter.clone());
@@ -21,7 +20,7 @@ pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dy
     let command = imd::get_command_output("nmap", args)?;
 
     // Create a file for the results
-    let output_file = format!("{}/all_tcp_ports", ip_string.to_string());
+    let output_file = format!("{}/all_tcp_ports", ip_string);
     let mut f = imd::create_file(args_bundle.user(), &output_file)?;
 
     // Write the command output to the file

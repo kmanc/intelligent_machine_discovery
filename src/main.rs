@@ -88,8 +88,6 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         Err(_) => return Err("Common TCP port scan".into()),
     };
 
-    /*
-
     // Parse the port scan to determine which services are running and where
     let services = utils::parse_port_scan(&args_bundle.clone(), &port_scan);
     let services = Arc::new(services);

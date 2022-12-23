@@ -7,8 +7,8 @@ pub fn dir_and_file_scan(
     protocol: &str,
     port: &str,
 ) -> Result<(), Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
@@ -56,8 +56,8 @@ pub fn vuln_scan(
     protocol: &str,
     port: &str,
 ) -> Result<(), Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     let ip_string = &args_bundle.machine().ip_address().to_string();
 

@@ -150,9 +150,11 @@ pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<
     Ok(out)
 }
 
-pub fn make_new_bar() -> ProgressBar {
+pub fn add_new_bar(bars_container: &MultiProgress) -> ProgressBar {
+    let bar = bars_container.add(ProgressBar::new(0));
     let style = ProgressStyle::with_template("{msg}").unwrap();
-    ProgressBar::new(0).with_style(style)
+    bar.set_style(style);
+    bar
 }
 
 pub fn make_message_starter(ip_address: &str, content: &str) -> String {

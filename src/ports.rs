@@ -3,8 +3,8 @@ use std::io::Write;
 use std::sync::Arc;
 
 pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();
@@ -35,8 +35,8 @@ pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dy
 }
 
 pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<String, Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();

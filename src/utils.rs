@@ -5,8 +5,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
 pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     // Unwrap the hostname, which we know has a value otherwise this function would not have been called
     let hostname = args_bundle.machine().hostname().as_ref().unwrap();
@@ -49,8 +49,8 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
 }
 
 pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();
@@ -85,8 +85,8 @@ pub fn parse_port_scan(
     args_bundle: &Arc<imd::DiscoveryArgs>,
     port_scan: &str,
 ) -> HashMap<String, Vec<String>> {
-    // Create a bar for messaging progress
-    let bar = args_bundle.bars_container().add(imd::make_new_bar());
+    // Add a bar for messaging progress
+    let bar = imd::add_new_bar(args_bundle.bars_container());
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();

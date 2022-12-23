@@ -48,18 +48,18 @@ fn post_main(conf: &conf::Conf) {
 
 fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
     // Make sure that the target machine is reachable
-    match ping::verify_connection(&args_bundle.clone()) {
+    match ping::verify_connection(&args_bundle) {
         Err(_) | Ok(imd::PingResult::Bad) => return Err("Connection".into()),
         Ok(imd::PingResult::Good) => {}
     }
 
     // If the target machine has a hostname, add it to the /etc/hosts file
     if args_bundle.machine().hostname().is_some() {
-        utils::add_to_etc_hosts(&args_bundle.clone()).unwrap();
+        utils::add_to_etc_hosts(&args_bundle).unwrap();
     };
 
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(&args_bundle.clone())?;
+    utils::create_dir(&args_bundle)?;
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
@@ -80,7 +80,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }));
 
-    /*
+    
 
     // Scan common TCP ports and perform service discovery
     let port_scan = match ports::common_tcp_ports(&args_bundle.clone()) {
@@ -88,7 +88,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         Err(_) => return Err("Common TCP port scan".into()),
     };
 
-    
+    /*
 
     // Parse the port scan to determine which services are running and where
     let services = utils::parse_port_scan(&args_bundle.clone(), &port_scan);

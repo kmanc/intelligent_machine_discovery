@@ -119,12 +119,12 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
         }
     }
 
+    */
+
     // Make sure that all threads have completed before continuing execution
     for thread in threads {
         thread.join().unwrap();
     }
-
-    */
 
     Ok(())
 }

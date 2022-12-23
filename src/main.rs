@@ -68,7 +68,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
     threads.push(thread::spawn({
         let args_bundle = args_bundle.clone();
         move || {
-            if ports::all_tcp_ports(&args_bundle).is_err() {}
+            if ports::all_tcp_ports(&args_bundle).is_err() {println!("PROBLEM")}
         }
     }));
 

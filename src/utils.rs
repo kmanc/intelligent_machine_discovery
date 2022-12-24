@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
-pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) {
     // Add a bar for messaging progress
-    let bar = imd::add_new_bar(args_bundle.bars_container());
+    let bar = args_bundle.add_new_bar();
 
     // Unwrap the hostname, which we know has a value otherwise this function would not have been called
     let hostname = args_bundle.machine().hostname().as_ref().unwrap();
@@ -21,10 +20,27 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
     bar.set_message(starter.clone());
 
     // Open the /etc/hosts files and read it line by line
-    let host_file = File::open("/etc/hosts")?;
+    let host_file = match File::open("/etc/hosts") {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem opening /etc/hosts file");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(host_file) => host_file,
+    };
     let reader = BufReader::new(host_file);
     for line in reader.lines() {
-        let line = line?;
+        let line = match line {
+            Err(_) => {
+                let output = imd::report(
+                    &imd::IMDOutcome::Neutral,
+                    "Problem with line in the /etc/hosts file",
+                );
+                bar.finish_with_message(format!("{starter}{output}"));
+                return;
+            }
+            Ok(line) => line,
+        };
         // If a line contains the ip address and hostname already, let the user know it is already there and exit
         if line.contains(ip_string) && line.contains(hostname) {
             let output = imd::report(
@@ -32,25 +48,34 @@ pub fn add_to_etc_hosts(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box
                 "Entry already in /etc/hosts, skipping",
             );
             bar.finish_with_message(format!("{starter}{output}"));
-            return Ok(());
+            return;
         }
     }
 
     // If we didn't already return, add the entry to the /etc/hosts file because it wasn't there
-    let host_file = OpenOptions::new().append(true).open("/etc/hosts")?;
+    let host_file = match OpenOptions::new().append(true).open("/etc/hosts") {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem opening /etc/hosts file");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(host_file) => host_file,
+    };
 
-    writeln!(&host_file, "{} {hostname}", ip_string)?;
+    if writeln!(&host_file, "{ip_string} {hostname}").is_err() {
+        let output = imd::report(&imd::IMDOutcome::Bad, "Problem writing to /etc/hosts file");
+        bar.finish_with_message(format!("{starter}{output}"));
+        return;
+    };
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
-
-    Ok(())
 }
 
-pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) {
     // Add a bar for messaging progress
-    let bar = imd::add_new_bar(args_bundle.bars_container());
+    let bar = args_bundle.add_new_bar();
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();
@@ -68,17 +93,22 @@ pub fn create_dir(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn E
             "Directory already exists, skipping",
         );
         bar.finish_with_message(format!("{starter}{output}"));
-        return Ok(());
+        return;
     }
 
     // Change ownership of the directory to the logged in user from Args
-    imd::change_owner(ip_string, args_bundle.user())?;
+    if imd::change_owner(ip_string, args_bundle.user()).is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem changing ownership of the results file to the logged in user",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return;
+    };
 
     // Report that we were successful in creating the results directory
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
-
-    Ok(())
 }
 
 pub fn parse_port_scan(

@@ -1,11 +1,8 @@
-use std::error::Error;
 use std::sync::Arc;
 
-pub fn verify_connection(
-    args_bundle: &Arc<imd::DiscoveryArgs>,
-) -> Result<imd::PingResult, Box<dyn Error>> {
+pub fn verify_connection(args_bundle: &Arc<imd::DiscoveryArgs>) -> imd::PingResult {
     // Add a bar for messaging progress
-    let bar = imd::add_new_bar(args_bundle.bars_container());
+    let bar = args_bundle.add_new_bar();
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();
@@ -18,17 +15,24 @@ pub fn verify_connection(
 
     // Run the ping command and capture the output
     let args = vec!["-c", "4", ip_string];
-    let command = imd::get_command_output("ping", args)?;
+    let command = match imd::get_command_output("ping", args) {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running ping command");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return imd::PingResult::Bad;
+        }
+        Ok(command) => command,
+    };
 
     if command.contains("100% packet loss") || command.contains("100.0% packet loss") {
         let output = imd::report(&imd::IMDOutcome::Bad, "Machine could not be reached");
         bar.finish_with_message(format!("{starter}{output}"));
-        return Ok(imd::PingResult::Bad);
+        return imd::PingResult::Bad;
     }
 
     // Report that we were successful in verifying the connection
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
 
-    Ok(imd::PingResult::Good)
+    imd::PingResult::Good
 }

@@ -85,6 +85,13 @@ pub struct DiscoveryArgs {
 }
 
 impl DiscoveryArgs {
+    pub fn add_new_bar(&self) -> ProgressBar {
+        let bar = self.bars_container.add(ProgressBar::new(0));
+        let style = ProgressStyle::with_template("{msg}").unwrap();
+        bar.set_style(style);
+        bar
+    }
+
     pub fn bars_container(&self) -> &MultiProgress {
         &self.bars_container
     }

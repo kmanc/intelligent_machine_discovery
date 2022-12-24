@@ -104,7 +104,7 @@ impl Conf {
         self.user.clone()
     }
 
-    pub fn wordlist(&self) -> &String {
+    pub fn wordlist(&self) -> &str {
         &self.wordlist
     }
 }

@@ -1,10 +1,9 @@
-use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
-pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) {
     // Add a bar for messaging progress
-    let bar = imd::add_new_bar(args_bundle.bars_container());
+    let bar = args_bundle.add_new_bar();
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();
@@ -18,31 +17,53 @@ pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dy
 
     // Run the port scan and capture the output
     let args = vec!["-p-", "-Pn", ip_string];
-    let command = imd::get_command_output("nmap", args)?;
+    let command = match imd::get_command_output("nmap", args) {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running the nmap command");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(command) => command,
+    };
 
     // Create a file for the results
-    let output_file = format!("{}/all_tcp_ports", ip_string);
-    let mut f = imd::create_file(args_bundle.user(), &output_file)?;
+    let output_file = format!("{ip_string}/all_tcp_ports");
+    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem creating a file for the output of the nmap command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(f) => f,
+    };
 
     // Write the command output to the file
-    writeln!(f, "{command}")?;
+    if writeln!(f, "{command}").is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem writing the results of the nmap command",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return;
+    };
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
-
-    Ok(())
 }
 
-pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<String, Box<dyn Error>> {
+pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> String {
     // Add a bar for messaging progress
-    let bar = imd::add_new_bar(args_bundle.bars_container());
+    let bar = args_bundle.add_new_bar();
 
     // Prevent borrow-after-freed
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_string, "Scanning common TCP ports for services with 'nmap -sV -Pn --script http-robots.txt --script http-title --script ssl-cert --script ftp-anon'");
+    let starter = imd::make_message_starter(ip_string, "Scanning common TCP ports for services with 'nmap -sV -Pn --script http-robots.txt,http-title,ssl-cert,ftp-anon'");
 
     // Report that we are scanning all common TCP ports
     bar.set_message(starter.clone());
@@ -61,18 +82,42 @@ pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<String,
         "ftp-anon",
         ip_string,
     ];
-    let command = imd::get_command_output("nmap", args)?;
+    let command = match imd::get_command_output("nmap", args) {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running the nmap command");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return String::new();
+        }
+        Ok(command) => command,
+    };
 
     // Create a file for the results
-    let output_file = format!("{}/common_tcp_ports", ip_string);
-    let mut f = imd::create_file(args_bundle.user(), &output_file)?;
+    let output_file = format!("{ip_string}/common_tcp_ports");
+    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem creating file for the output of the nmap command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return String::new();
+        }
+        Ok(f) => f,
+    };
 
     // Write the command output to the file
-    writeln!(f, "{command}")?;
+    if writeln!(f, "{command}").is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem writing the results of the nmap command",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return String::new();
+    };
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
 
-    Ok(command)
+    command
 }

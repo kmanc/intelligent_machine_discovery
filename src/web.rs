@@ -1,12 +1,7 @@
-use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
-pub fn dir_and_file_scan(
-    args_bundle: &Arc<imd::DiscoveryArgs>,
-    protocol: &str,
-    port: &str,
-) -> Result<(), Box<dyn Error>> {
+pub fn dir_and_file_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, port: &str) {
     // Add a bar for messaging progress
     let bar = imd::add_new_bar(args_bundle.bars_container());
 
@@ -32,30 +27,51 @@ pub fn dir_and_file_scan(
         "-u",
         &full_location,
     ];
-    let command = imd::get_command_output("feroxbuster", args)?;
+    let command = match imd::get_command_output("feroxbuster", args) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem running the feroxbuster command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(command) => command,
+    };
 
     // For some reason this output has double "\n" at the end of each line, so we fix that
     let command = command.replace("\n\n", "\n");
 
     // Create a file for the results
-    let output_file = format!("{}/web_dirs_and_files_port_{port}", ip_string);
-    let mut f = imd::create_file(args_bundle.user(), &output_file)?;
+    let output_file = format!("{ip_string}/web_dirs_and_files_port_{port}");
+    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem creating file for the output of the feroxbuster command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(f) => f,
+    };
 
     // Write the command output to the file
-    writeln!(f, "{command}")?;
+    if writeln!(f, "{command}").is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem writing the results of the feroxbuster command",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return;
+    };
 
     // Report that we were successful in adding to /etc/hosts
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
-
-    Ok(())
 }
 
-pub fn vuln_scan(
-    args_bundle: &Arc<imd::DiscoveryArgs>,
-    protocol: &str,
-    port: &str,
-) -> Result<(), Box<dyn Error>> {
+pub fn vuln_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, port: &str) {
     // Add a bar for messaging progress
     let bar = imd::add_new_bar(args_bundle.bars_container());
 
@@ -74,18 +90,40 @@ pub fn vuln_scan(
 
     // Run the vuln scan and capture the output
     let args = vec!["-host", &full_location, "-maxtime", "60"];
-    let command = imd::get_command_output("nikto", args)?;
+    let command = match imd::get_command_output("nikto", args) {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running the nikto command");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(command) => command,
+    };
 
     // Create a file for the results
-    let output_file = format!("{}/web_vulns_port_{port}", ip_string);
-    let mut f = imd::create_file(args_bundle.user(), &output_file)?;
+    let output_file = format!("{ip_string}/web_vulns_port_{port}");
+    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem creating file for the output of the nikto command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(f) => f,
+    };
 
     // Write the command output to the file
-    writeln!(f, "{command}")?;
+    if writeln!(f, "{command}").is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem writing the results of the nikto command",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return;
+    };
 
     // Report that we completed the web vuln scan
     let output = imd::report(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
-
-    Ok(())
 }

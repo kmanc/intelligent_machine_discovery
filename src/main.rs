@@ -5,7 +5,6 @@ mod ports;
 mod utils;
 mod web;
 use indicatif::MultiProgress;
-use std::error::Error;
 use std::sync::Arc;
 use std::thread;
 
@@ -31,11 +30,7 @@ fn post_main(conf: &conf::Conf) {
             conf.wordlist().to_string(),
         );
         let discovery_args = Arc::new(discovery_args);
-        threads.push(thread::spawn({
-            move || {
-                if discovery(&discovery_args).is_err() {}
-            }
-        }));
+        threads.push(thread::spawn(move || discovery(&discovery_args)));
     }
 
     // Make sure that all threads have completed before continuing execution
@@ -46,20 +41,20 @@ fn post_main(conf: &conf::Conf) {
     println!("Discovery completed for all target machines");
 }
 
-fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>> {
+fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) {
     // Make sure that the target machine is reachable
-    match ping::verify_connection(&args_bundle) {
-        Err(_) | Ok(imd::PingResult::Bad) => return Err("Connection".into()),
-        Ok(imd::PingResult::Good) => {}
+    match ping::verify_connection(&args_bundle.clone()) {
+        imd::PingResult::Bad => return,
+        imd::PingResult::Good => {}
     }
 
     // If the target machine has a hostname, add it to the /etc/hosts file
     if args_bundle.machine().hostname().is_some() {
-        utils::add_to_etc_hosts(&args_bundle).unwrap();
+        utils::add_to_etc_hosts(&args_bundle.clone());
     };
 
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(&args_bundle)?;
+    utils::create_dir(&args_bundle.clone());
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
@@ -67,26 +62,17 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
     // Scan all TCP ports on the machine
     threads.push(thread::spawn({
         let args_bundle = args_bundle.clone();
-        move || {
-            if ports::all_tcp_ports(&args_bundle).is_err() {}
-        }
+        move || ports::all_tcp_ports(&args_bundle)
     }));
 
     // Scan NFS server on the machine
     threads.push(thread::spawn({
         let args_bundle = args_bundle.clone();
-        move || {
-            if drives::network_drives(&args_bundle).is_err() {}
-        }
+        move || drives::network_drives(&args_bundle)
     }));
 
     // Scan common TCP ports and perform service discovery
-    let port_scan = match ports::common_tcp_ports(&args_bundle.clone()) {
-        Ok(port_scan) => port_scan,
-        Err(_) => return Err("Common TCP port scan".into()),
-    };
-
-    /*
+    let port_scan = ports::common_tcp_ports(&args_bundle.clone());
 
     // Parse the port scan to determine which services are running and where
     let services = utils::parse_port_scan(&args_bundle.clone(), &port_scan);
@@ -101,7 +87,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
                 let port = port.clone();
                 let service = service.clone();
                 move || {
-                    if web::vuln_scan(&args_bundle, &service, &port).is_err() {}
+                    web::vuln_scan(&args_bundle, &service, &port);
                 }
             }));
             // Spin up a thread for the web dir and file scanning
@@ -110,18 +96,14 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) -> Result<(), Box<dyn Error>
                 let port = port.clone();
                 let service = service.clone();
                 move || {
-                    if web::dir_and_file_scan(&args_bundle, &service, &port).is_err() {}
+                    web::dir_and_file_scan(&args_bundle, &service, &port);
                 }
             }));
         }
     }
 
-    */
-
     // Make sure that all threads have completed before continuing execution
     for thread in threads {
         thread.join().unwrap();
     }
-
-    Ok(())
 }

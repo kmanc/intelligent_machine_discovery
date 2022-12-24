@@ -5,37 +5,32 @@ mod ports;
 mod utils;
 mod web;
 use indicatif::MultiProgress;
-use std::error::Error;
 use std::sync::Arc;
 use std::thread;
 
 fn main() {
     // Parse command line arguments and proceed if successful
     let conf = conf::Conf::init();
-    post_main(conf);
+    post_main(&conf);
 }
 
-fn post_main(conf: conf::Conf) {
-    // Create a multiprogress bar for housing all the individual bars
-    let bar_container = Arc::new(MultiProgress::new());
+fn post_main(conf: &conf::Conf) {
+    // Create multiprogress bar to house all of the individual bars that update status
+    let bars_container = MultiProgress::new();
 
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads = vec![];
 
     // Run the discovery function on each of the target machines in its own thread
     for machine in conf.machines().iter() {
-        let hostname = Arc::new(machine.hostname().to_owned());
-        let ip_address = Arc::new(machine.ip_address().to_string());
-        threads.push(thread::spawn({
-            let bar_container = bar_container.clone();
-            let hostname = hostname.clone();
-            let ip_address = ip_address.clone();
-            let user = conf.user().clone();
-            let wordlist = conf.wordlist().clone();
-            move || {
-                if discovery(bar_container, user, ip_address, hostname, wordlist).is_err() {}
-            }
-        }));
+        let discovery_args = imd::DiscoveryArgs::new(
+            bars_container.clone(),
+            machine.clone(),
+            conf.user(),
+            conf.wordlist().to_string(),
+        );
+        let discovery_args = Arc::new(discovery_args);
+        threads.push(thread::spawn(move || discovery(&discovery_args)));
     }
 
     // Make sure that all threads have completed before continuing execution
@@ -46,65 +41,41 @@ fn post_main(conf: conf::Conf) {
     println!("Discovery completed for all target machines");
 }
 
-fn discovery(
-    bar_container: Arc<MultiProgress>,
-    user: Arc<imd::IMDUser>,
-    ip_address: Arc<String>,
-    hostname: Arc<Option<String>>,
-    wordlist: Arc<String>,
-) -> Result<(), Box<dyn Error>> {
+fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) {
     // Make sure that the target machine is reachable
-    match ping::verify_connection(bar_container.clone(), &ip_address) {
-        Err(_) | Ok(imd::PingResult::Bad) => return Err("Connection".into()),
-        Ok(imd::PingResult::Good) => {}
+    match ping::verify_connection(&args_bundle.clone()) {
+        imd::PingResult::Bad => return,
+        imd::PingResult::Good => {}
     }
 
-    // If the target machine has a hostname, add it to the /etc/hosts file and set it as the target for future web scans (if applicable)
-    // Otherwise skip the /etc/hosts file and use the IP address for web scans
-    let web_location: Arc<String> = match &*hostname {
-        Some(hostname) => {
-            let hostname = Arc::new(hostname.to_string());
-            utils::add_to_etc_hosts(bar_container.clone(), &hostname, &ip_address).unwrap();
-            hostname
-        }
-        None => ip_address.clone(),
+    // If the target machine has a hostname, add it to the /etc/hosts file
+    if args_bundle.machine().hostname().is_some() {
+        utils::add_to_etc_hosts(&args_bundle.clone());
     };
 
     // Create a landing space for all of the files that results will get written to
-    utils::create_dir(bar_container.clone(), user.clone(), &ip_address)?;
+    utils::create_dir(&args_bundle.clone());
 
     // Create a vector for threads. Each will be responsible a sub-task run against the target machine
     let mut threads = vec![];
 
     // Scan all TCP ports on the machine
     threads.push(thread::spawn({
-        let bar_container = bar_container.clone();
-        let ip_address = ip_address.clone();
-        let user = user.clone();
-        move || {
-            if ports::all_tcp_ports(bar_container, user, &ip_address).is_err() {}
-        }
+        let args_bundle = args_bundle.clone();
+        move || ports::all_tcp_ports(&args_bundle)
     }));
 
     // Scan NFS server on the machine
     threads.push(thread::spawn({
-        let bar_container = bar_container.clone();
-        let ip_address = ip_address.clone();
-        let user = user.clone();
-        move || {
-            if drives::network_drives(bar_container, user, &ip_address).is_err() {}
-        }
+        let args_bundle = args_bundle.clone();
+        move || drives::network_drives(&args_bundle)
     }));
 
     // Scan common TCP ports and perform service discovery
-    let port_scan = match ports::common_tcp_ports(bar_container.clone(), user.clone(), &ip_address)
-    {
-        Ok(port_scan) => port_scan,
-        Err(_) => return Err("Common TCP port scan".into()),
-    };
+    let port_scan = ports::common_tcp_ports(&args_bundle.clone());
 
     // Parse the port scan to determine which services are running and where
-    let services = utils::parse_port_scan(bar_container.clone(), &ip_address, port_scan);
+    let services = utils::parse_port_scan(&args_bundle.clone(), &port_scan);
     let services = Arc::new(services);
 
     // For now we are only parsing web servers, so scan them for vulnerabilities, directories, and files
@@ -112,46 +83,20 @@ fn discovery(
         for port in ports {
             // Spin up a thread for the vuln scan
             threads.push(thread::spawn({
-                let bar_container = bar_container.clone();
-                let ip_address = ip_address.clone();
+                let args_bundle = args_bundle.clone();
                 let port = port.clone();
                 let service = service.clone();
-                let user = user.clone();
-                let web_location = web_location.clone();
                 move || {
-                    if web::vuln_scan(
-                        bar_container,
-                        user,
-                        &ip_address,
-                        &service,
-                        &port,
-                        &web_location,
-                    )
-                    .is_err()
-                    {}
+                    web::vuln_scan(&args_bundle, &service, &port);
                 }
             }));
             // Spin up a thread for the web dir and file scanning
             threads.push(thread::spawn({
-                let bar_container = bar_container.clone();
-                let ip_address = ip_address.clone();
+                let args_bundle = args_bundle.clone();
                 let port = port.clone();
                 let service = service.clone();
-                let user = user.clone();
-                let web_location = web_location.clone();
-                let wordlist = wordlist.clone();
                 move || {
-                    if web::dir_and_file_scan(
-                        bar_container,
-                        user,
-                        &ip_address,
-                        &service,
-                        &port,
-                        &web_location,
-                        &wordlist,
-                    )
-                    .is_err()
-                    {}
+                    web::dir_and_file_scan(&args_bundle, &service, &port);
                 }
             }));
         }
@@ -161,6 +106,4 @@ fn discovery(
     for thread in threads {
         thread.join().unwrap();
     }
-
-    Ok(())
 }

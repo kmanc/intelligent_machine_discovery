@@ -1,56 +1,72 @@
-use indicatif::MultiProgress;
-use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
 
-pub fn all_tcp_ports(
-    bar_container: Arc<MultiProgress>,
-    user: Arc<imd::IMDUser>,
-    ip_address: &str,
-) -> Result<(), Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = bar_container.add(imd::make_new_bar());
+pub fn all_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) {
+    // Add a bar for messaging progress
+    let bar = args_bundle.add_new_bar();
+
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
     let starter =
-        imd::make_message_starter(ip_address, "Scanning all TCP ports using 'nmap -p- -Pn'");
-    let starter_clone = starter.clone();
+        imd::make_message_starter(ip_string, "Scanning all TCP ports using 'nmap -p- -Pn'");
 
     // Report that we are scanning all TCP ports
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Run the port scan and capture the output
-    let args = vec!["-p-", "-Pn", ip_address];
-    let command = imd::get_command_output("nmap", args)?;
+    let args = vec!["-p-", "-Pn", ip_string];
+    let command = match imd::get_command_output("nmap", args) {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running the nmap command");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(command) => command,
+    };
 
     // Create a file for the results
-    let output_file = format!("{ip_address}/all_tcp_ports");
-    let mut f = imd::create_file(user, &output_file)?;
+    let output_file = format!("{ip_string}/all_tcp_ports");
+    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem creating a file for the output of the nmap command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return;
+        }
+        Ok(f) => f,
+    };
 
     // Write the command output to the file
-    writeln!(f, "{command}")?;
+    if writeln!(f, "{command}").is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem writing the results of the nmap command",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return;
+    };
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
-
-    Ok(())
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
+    bar.finish_with_message(format!("{starter}{output}"));
 }
 
-pub fn common_tcp_ports(
-    bar_container: Arc<MultiProgress>,
-    user: Arc<imd::IMDUser>,
-    ip_address: &str,
-) -> Result<String, Box<dyn Error>> {
-    // Create a bar for messaging progress
-    let bar = bar_container.add(imd::make_new_bar());
+pub fn common_tcp_ports(args_bundle: &Arc<imd::DiscoveryArgs>) -> String {
+    // Add a bar for messaging progress
+    let bar = args_bundle.add_new_bar();
+
+    // Prevent borrow-after-freed
+    let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_address, "Scanning common TCP ports for services with 'nmap -sV -Pn --script http-robots.txt --script http-title --script ssl-cert --script ftp-anon'");
-    let starter_clone = starter.clone();
+    let starter = imd::make_message_starter(ip_string, "Scanning common TCP ports for services with 'nmap -sV -Pn --script http-robots.txt,http-title,ssl-cert,ftp-anon'");
 
     // Report that we are scanning all common TCP ports
-    bar.set_message(starter);
+    bar.set_message(starter.clone());
 
     // Run the port scan and capture the output
     let args = vec![
@@ -64,20 +80,44 @@ pub fn common_tcp_ports(
         "ssl-cert",
         "--script",
         "ftp-anon",
-        ip_address,
+        ip_string,
     ];
-    let command = imd::get_command_output("nmap", args)?;
+    let command = match imd::get_command_output("nmap", args) {
+        Err(_) => {
+            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running the nmap command");
+            bar.finish_with_message(format!("{starter}{output}"));
+            return String::new();
+        }
+        Ok(command) => command,
+    };
 
     // Create a file for the results
-    let output_file = format!("{ip_address}/common_tcp_ports");
-    let mut f = imd::create_file(user, &output_file)?;
+    let output_file = format!("{ip_string}/common_tcp_ports");
+    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
+        Err(_) => {
+            let output = imd::report(
+                &imd::IMDOutcome::Bad,
+                "Problem creating file for the output of the nmap command",
+            );
+            bar.finish_with_message(format!("{starter}{output}"));
+            return String::new();
+        }
+        Ok(f) => f,
+    };
 
     // Write the command output to the file
-    writeln!(f, "{command}")?;
+    if writeln!(f, "{command}").is_err() {
+        let output = imd::report(
+            &imd::IMDOutcome::Bad,
+            "Problem writing the results of the nmap command",
+        );
+        bar.finish_with_message(format!("{starter}{output}"));
+        return String::new();
+    };
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(imd::IMDOutcome::Good, "Done");
-    bar.finish_with_message(format!("{starter_clone}{output}"));
+    let output = imd::report(&imd::IMDOutcome::Good, "Done");
+    bar.finish_with_message(format!("{starter}{output}"));
 
-    Ok(command)
+    command
 }

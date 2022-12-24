@@ -3,12 +3,12 @@ use nix::unistd::{Gid, Uid, User};
 use std::env;
 use std::iter::zip;
 use std::net::IpAddr;
-use std::sync::Arc;
+//use std::sync::Arc;
 
 pub struct Conf {
     machines: Vec<imd::TargetMachine>,
-    user: Arc<imd::IMDUser>,
-    wordlist: Arc<String>,
+    user: imd::IMDUser,
+    wordlist: String,
 }
 
 impl Conf {
@@ -22,7 +22,7 @@ impl Conf {
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
             let error = imd::report(
-                imd::IMDOutcome::Bad,
+                &imd::IMDOutcome::Bad,
                 "imd must be run with root permissions, please try running 'sudo!!'",
             );
             panic!("{error}")
@@ -49,15 +49,27 @@ impl Conf {
 
         // Add all the valid IP addresses to the target machine list with the associates hostnames
         for (ip_address, name) in zip(ip_addresses, names) {
-            match ip_address {
-                Ok(ip_address) => machines.push(imd::TargetMachine::new(name, ip_address)),
-                Err(_) => {
-                    let log = imd::report(
-                        imd::IMDOutcome::Bad,
-                        "Oooops, an entered IP addresses wasn't actually an IP address, skipping it"
-                    );
-                    println!("{log}");
-                }
+            if let Ok(ip_address) = ip_address {
+                // If the target machine has a hostname, set it as the target for future web scans (if there are any)
+                // Otherwise use the IP address for web scans
+                match name {
+                    Some(name) => machines.push(imd::TargetMachine::new(
+                        Some(name.clone()),
+                        ip_address,
+                        name,
+                    )),
+                    None => machines.push(imd::TargetMachine::new(
+                        None,
+                        ip_address,
+                        ip_address.to_string(),
+                    )),
+                };
+            } else {
+                let log = imd::report(
+                    &imd::IMDOutcome::Bad,
+                    "Oooops, an entered IP addresses wasn't actually an IP address, skipping it",
+                );
+                println!("{log}");
             }
         }
 
@@ -79,8 +91,8 @@ impl Conf {
         // Return the args, which includes the target machines, the logged in user, and the wordlist
         Conf {
             machines,
-            user: Arc::new(user),
-            wordlist: Arc::new(wordlist),
+            user,
+            wordlist,
         }
     }
 
@@ -88,11 +100,11 @@ impl Conf {
         &self.machines
     }
 
-    pub fn user(&self) -> &Arc<imd::IMDUser> {
-        &self.user
+    pub fn user(&self) -> imd::IMDUser {
+        self.user.clone()
     }
 
-    pub fn wordlist(&self) -> &Arc<String> {
+    pub fn wordlist(&self) -> &str {
         &self.wordlist
     }
 }
@@ -103,34 +115,33 @@ fn cli() -> Command {
         .author(crate_authors!())
         .about(crate_description!());
 
-    app
-        .arg(
-            Arg::new("targets")
-                .short('t')
-                .long("targets")
-                .value_name("IP_ADDRESS")
-                .num_args(1..)
-                .value_hint(ValueHint::CommandString)
-                .required(true)
-                .help("Target machine(s)'s IP address(es)"),
-        )
-        .arg(
-            Arg::new("names")
-                .short('n')
-                .long("names")
-                .value_name("NAME")
-                .num_args(1..)
-                .value_hint(ValueHint::CommandString)
-                .help("Target machine(s)'s name(s)"),
-        )
-        .arg(
-            Arg::new("wordlist")
-                .short('w')
-                .long("wordlist")
-                .value_name("WORDLIST")
-                .num_args(1)
-                .value_hint(ValueHint::FilePath)
-                .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
-                .help("Wordlist for web discovery"),
-        )
+    app.arg(
+        Arg::new("targets")
+            .short('t')
+            .long("targets")
+            .value_name("IP_ADDRESS")
+            .num_args(1..)
+            .value_hint(ValueHint::CommandString)
+            .required(true)
+            .help("Target machine(s)'s IP address(es)"),
+    )
+    .arg(
+        Arg::new("names")
+            .short('n')
+            .long("names")
+            .value_name("NAME")
+            .num_args(1..)
+            .value_hint(ValueHint::CommandString)
+            .help("Target machine(s)'s name(s)"),
+    )
+    .arg(
+        Arg::new("wordlist")
+            .short('w')
+            .long("wordlist")
+            .value_name("WORDLIST")
+            .num_args(1)
+            .value_hint(ValueHint::FilePath)
+            .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
+            .help("Wordlist for web discovery"),
+    )
 }

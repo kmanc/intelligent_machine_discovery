@@ -1,11 +1,10 @@
 use crossterm::style::{StyledContent, Stylize};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nix::unistd::{chown, Gid, Uid};
 use std::error::Error;
 use std::fs::File;
 use std::net::IpAddr;
 use std::process::Command;
-use std::sync::Arc;
 
 enum Color {
     Green,
@@ -24,9 +23,11 @@ pub enum PingResult {
     Bad,
 }
 
+#[derive(Clone)]
 pub struct TargetMachine {
     hostname: Option<String>,
     ip_address: IpAddr,
+    web_target: String,
 }
 
 impl TargetMachine {
@@ -38,14 +39,20 @@ impl TargetMachine {
         &self.ip_address
     }
 
-    pub fn new(hostname: Option<String>, ip_address: IpAddr) -> TargetMachine {
+    pub fn new(hostname: Option<String>, ip_address: IpAddr, web_target: String) -> TargetMachine {
         TargetMachine {
             hostname,
             ip_address,
+            web_target,
         }
+    }
+
+    pub fn web_target(&self) -> &String {
+        &self.web_target
     }
 }
 
+#[derive(Clone)]
 pub struct IMDUser {
     gid: Gid,
     name: String,
@@ -70,20 +77,58 @@ impl IMDUser {
     }
 }
 
-/*pub struct TEST {
-    bar_container: String,
-    user: String,
-    ip_address: String,
-    hostname: String,
+pub struct DiscoveryArgs {
+    bars_container: MultiProgress,
+    machine: TargetMachine,
+    user: IMDUser,
     wordlist: String,
-}*/
+}
 
-pub fn change_owner(object: &str, new_owner: Arc<IMDUser>) -> Result<(), Box<dyn Error>> {
+impl DiscoveryArgs {
+    pub fn add_new_bar(&self) -> ProgressBar {
+        let bar = self.bars_container.add(ProgressBar::new(0));
+        let style = ProgressStyle::with_template("{msg}").unwrap();
+        bar.set_style(style);
+        bar
+    }
+
+    pub fn bars_container(&self) -> &MultiProgress {
+        &self.bars_container
+    }
+
+    pub fn machine(&self) -> &TargetMachine {
+        &self.machine
+    }
+
+    pub fn new(
+        bars_container: MultiProgress,
+        machine: TargetMachine,
+        user: IMDUser,
+        wordlist: String,
+    ) -> DiscoveryArgs {
+        DiscoveryArgs {
+            bars_container,
+            machine,
+            user,
+            wordlist,
+        }
+    }
+
+    pub fn user(&self) -> &IMDUser {
+        &self.user
+    }
+
+    pub fn wordlist(&self) -> &String {
+        &self.wordlist
+    }
+}
+
+pub fn change_owner(object: &str, new_owner: &IMDUser) -> Result<(), Box<dyn Error>> {
     chown(object, Some(*new_owner.uid()), Some(*new_owner.gid()))?;
     Ok(())
 }
 
-pub fn create_file(user: Arc<IMDUser>, filename: &str) -> Result<File, Box<dyn Error>> {
+pub fn create_file(user: &IMDUser, filename: &str) -> Result<File, Box<dyn Error>> {
     // Create the desired file
     let f = File::create(filename)?;
 
@@ -112,9 +157,11 @@ pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<
     Ok(out)
 }
 
-pub fn make_new_bar() -> ProgressBar {
+pub fn add_new_bar(bars_container: &MultiProgress) -> ProgressBar {
+    let bar = bars_container.add(ProgressBar::new(0));
     let style = ProgressStyle::with_template("{msg}").unwrap();
-    ProgressBar::new(0).with_style(style)
+    bar.set_style(style);
+    bar
 }
 
 pub fn make_message_starter(ip_address: &str, content: &str) -> String {
@@ -122,17 +169,11 @@ pub fn make_message_starter(ip_address: &str, content: &str) -> String {
     format!("{formatted_ip}{content} ")
 }
 
-pub fn report (outcome: IMDOutcome, text: &str) -> String {
+pub fn report(outcome: &IMDOutcome, text: &str) -> String {
     let (text, color) = match outcome {
-        IMDOutcome::Bad => {
-            (format!("✕ {text}"), Color::Red)
-        },
-        IMDOutcome::Good => {
-            (format!("✔️ {text}"), Color::Green)
-        },
-        IMDOutcome::Neutral => {
-            (format!("~ {text}"), Color::Yellow)
-        },
+        IMDOutcome::Bad => (format!("✕ {text}"), Color::Red),
+        IMDOutcome::Good => (format!("✔️ {text}"), Color::Green),
+        IMDOutcome::Neutral => (format!("~ {text}"), Color::Yellow),
     };
     color_text(&text, color).to_string()
 }

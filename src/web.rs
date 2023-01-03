@@ -8,7 +8,7 @@ pub fn dir_and_file_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, 
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(ip_string, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough --time-limit 10m'"));
+    let starter = imd::format_command_start(ip_string, 16, &format!("Scanning for web directories and files on port {port} with 'feroxbuster -q --thorough --time-limit 10m'"));
 
     // Report that we are scanning for web directories and files
     bar.set_message(starter.clone());
@@ -27,15 +27,8 @@ pub fn dir_and_file_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, 
         "-u",
         &full_location,
     ];
-    let command = match imd::get_command_output("feroxbuster", args) {
-        Err(_) => {
-            let output = imd::report(
-                &imd::IMDOutcome::Bad,
-                "Problem running the feroxbuster command",
-            );
-            bar.finish_with_message(format!("{starter}{output}"));
-            return;
-        }
+    let command = match imd::get_command_output("feroxbuster", args, &bar, &starter) {
+        Err(_) => return,
         Ok(command) => command,
     };
 
@@ -44,21 +37,20 @@ pub fn dir_and_file_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, 
 
     // Create a file for the results
     let output_file = format!("{ip_string}/web_dirs_and_files_port_{port}");
-    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
-        Err(_) => {
-            let output = imd::report(
-                &imd::IMDOutcome::Bad,
-                "Problem creating file for the output of the feroxbuster command",
-            );
-            bar.finish_with_message(format!("{starter}{output}"));
-            return;
-        }
+    let mut f = match imd::create_file(
+        args_bundle.user(),
+        &output_file,
+        "feroxbuster",
+        &bar,
+        &starter,
+    ) {
+        Err(_) => return,
         Ok(f) => f,
     };
 
     // Write the command output to the file
     if writeln!(f, "{command}").is_err() {
-        let output = imd::report(
+        let output = imd::format_command_result(
             &imd::IMDOutcome::Bad,
             "Problem writing the results of the feroxbuster command",
         );
@@ -67,7 +59,7 @@ pub fn dir_and_file_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, 
     };
 
     // Report that we were successful in adding to /etc/hosts
-    let output = imd::report(&imd::IMDOutcome::Good, "Done");
+    let output = imd::format_command_result(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
 }
 
@@ -78,8 +70,9 @@ pub fn vuln_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, port: &s
     let ip_string = &args_bundle.machine().ip_address().to_string();
 
     // All messages logged will start with the same thing so create it once up front
-    let starter = imd::make_message_starter(
+    let starter = imd::format_command_start(
         ip_string,
+        16,
         &format!("Scanning for web vulnerabilities on port {port} with 'nikto -host -maxtime 60'"),
     );
 
@@ -90,32 +83,21 @@ pub fn vuln_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, port: &s
 
     // Run the vuln scan and capture the output
     let args = vec!["-host", &full_location, "-maxtime", "60"];
-    let command = match imd::get_command_output("nikto", args) {
-        Err(_) => {
-            let output = imd::report(&imd::IMDOutcome::Bad, "Problem running the nikto command");
-            bar.finish_with_message(format!("{starter}{output}"));
-            return;
-        }
+    let command = match imd::get_command_output("nikto", args, &bar, &starter) {
+        Err(_) => return,
         Ok(command) => command,
     };
 
     // Create a file for the results
     let output_file = format!("{ip_string}/web_vulns_port_{port}");
-    let mut f = match imd::create_file(args_bundle.user(), &output_file) {
-        Err(_) => {
-            let output = imd::report(
-                &imd::IMDOutcome::Bad,
-                "Problem creating file for the output of the nikto command",
-            );
-            bar.finish_with_message(format!("{starter}{output}"));
-            return;
-        }
+    let mut f = match imd::create_file(args_bundle.user(), &output_file, "nikto", &bar, &starter) {
+        Err(_) => return,
         Ok(f) => f,
     };
 
     // Write the command output to the file
     if writeln!(f, "{command}").is_err() {
-        let output = imd::report(
+        let output = imd::format_command_result(
             &imd::IMDOutcome::Bad,
             "Problem writing the results of the nikto command",
         );
@@ -124,6 +106,6 @@ pub fn vuln_scan(args_bundle: &Arc<imd::DiscoveryArgs>, protocol: &str, port: &s
     };
 
     // Report that we completed the web vuln scan
-    let output = imd::report(&imd::IMDOutcome::Good, "Done");
+    let output = imd::format_command_result(&imd::IMDOutcome::Good, "Done");
     bar.finish_with_message(format!("{starter}{output}"));
 }

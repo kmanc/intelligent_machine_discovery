@@ -1,9 +1,10 @@
-use clap::{crate_authors, crate_description, crate_name, crate_version, Arg, Command, ValueHint};
+use clap::{self, Arg, ValueHint};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nix::unistd::{Gid, Uid, User};
-use std::env;
-use std::iter::zip;
+use std::iter;
 use std::net::IpAddr;
-//use std::sync::Arc;
+use std::path::Path;
+use std::sync::Arc;
 
 pub struct Conf {
     machines: Vec<imd::TargetMachine>,
@@ -12,88 +13,110 @@ pub struct Conf {
 }
 
 impl Conf {
-    pub fn init() -> Conf {
+    pub fn init() -> Option<Conf> {
         // Set up the command line arguments and their associated settings
         let app = cli();
 
         // Parse what the user entered
         let matches = app.get_matches();
 
+        // Create a multiprogress container for printing things to
+        let mp = Arc::new(MultiProgress::new());
+
+        // Create a bar for validating the inputs that clap can't
+        let bar = mp.add(ProgressBar::new(0));
+        let style = ProgressStyle::with_template("{msg}").unwrap();
+        bar.set_style(style);
+
+        // Inform user that inputs are being validated
+        let starter = "Validating imd configuration ";
+        bar.set_message(starter);
+
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
-            let error = imd::report(
+            let outcome = imd::format_command_result(
                 &imd::IMDOutcome::Bad,
-                "imd must be run with root permissions, please try running 'sudo!!'",
+                "imd must be run with root permissions, please try running 'sudo !!'",
             );
-            panic!("{error}")
+            bar.finish_with_message(format!("{starter}{outcome}"));
+            return None;
         }
+
+        // Run the who command to determine the logged in user (hopefully the person who ran imd)
+        let name = std::process::Command::new("who").output().unwrap();
+        let name = String::from_utf8(name.stdout).unwrap();
+        let name = String::from(name.split(' ').collect::<Vec<&str>>()[0]);
+
+        // Get the user ID from the username
+        let (uid, gid) = match User::from_name(&name).unwrap() {
+            None => (Uid::from_raw(0), Gid::from_raw(0)),
+            Some(user) => (user.uid, user.gid),
+        };
+
+        // Create an IMD user that will be used to do file permissions work later on
+        let user = imd::IMDUser::new(gid, name, uid);
 
         // Set an empty vec for target machines
         let mut machines: Vec<imd::TargetMachine> = vec![];
 
-        // Get the target machines parsed as IP addresses
-        let ip_addresses: Vec<_> = matches
-            .get_many::<String>("targets")
+        // Get the target IP addresses but convert them to strings because we won't actually need them for anything other than printing
+        let ip_addresses: Vec<String> = matches
+            .get_many::<IpAddr>("targets")
             .unwrap()
-            .map(|s| s.parse::<IpAddr>())
+            .map(|ip| ip.to_string())
             .collect();
 
+        // Find the longest IP address entered
+        let longest = ip_addresses
+            .iter()
+            .max_by(|&x, &y| x.len().cmp(&y.len()))
+            .unwrap();
+
+        // Add one to it's length for formatting the output of commands run later on
+        let print_pad = longest.len() + 1;
+
         // Get the target names, or an empty vector if None
-        let mut names: Vec<_> = match matches.get_many::<String>("names") {
+        let mut names: Vec<Option<String>> = match matches.try_get_many::<String>("names").unwrap()
+        {
             None => vec![],
-            Some(names) => names.map(|s| Some(s.to_string())).collect(),
+            Some(names) => names.map(|s| Some(String::from(s))).collect(),
         };
 
         // Pad the names list with None until it's the same length as IP addresses
         names.resize_with(ip_addresses.len(), || None);
 
-        // Add all the valid IP addresses to the target machine list with the associates hostnames
-        for (ip_address, name) in zip(ip_addresses, names) {
-            if let Ok(ip_address) = ip_address {
-                // If the target machine has a hostname, set it as the target for future web scans (if there are any)
-                // Otherwise use the IP address for web scans
-                match name {
-                    Some(name) => machines.push(imd::TargetMachine::new(
-                        Some(name.clone()),
-                        ip_address,
-                        name,
-                    )),
-                    None => machines.push(imd::TargetMachine::new(
-                        None,
-                        ip_address,
-                        ip_address.to_string(),
-                    )),
-                };
-            } else {
-                let log = imd::report(
-                    &imd::IMDOutcome::Bad,
-                    "Oooops, an entered IP addresses wasn't actually an IP address, skipping it",
-                );
-                println!("{log}");
-            }
+        // Add all the IP addresses to the target machine list with the associates hostnames (if any)
+        for (ip_address, name) in iter::zip(ip_addresses, names) {
+            machines.push(imd::TargetMachine::new(
+                name,
+                ip_address,
+                mp.clone(),
+                print_pad,
+            ))
         }
-
-        // Run the who command to determine the logged in user (hopefully the person who ran imd)
-        let name = imd::get_command_output("who", [].to_vec()).unwrap();
-        let name = String::from(name.split(' ').collect::<Vec<&str>>()[0]);
-
-        // Get the user ID from the username
-        let (uid, gid) = match User::from_name(&name).unwrap() {
-            Some(user) => (user.uid, user.gid),
-            _ => (Uid::from_raw(0), Gid::from_raw(0)),
-        };
-
-        let user = imd::IMDUser::new(gid, name, uid);
 
         // Get the wordlist, which will either be the user-provided option or the default value
         let wordlist = matches.get_one::<String>("wordlist").unwrap().to_string();
 
+        // Make sure the path is a real file on the user's drive
+        if !Path::new(&wordlist).exists() {
+            let outcome = imd::format_command_result(
+                &imd::IMDOutcome::Bad,
+                &format!("'{wordlist}' is not a valid filepath "),
+            );
+            bar.finish_with_message(format!("{starter}{outcome}"));
+            return None;
+        }
+
+        let outcome = imd::format_command_result(&imd::IMDOutcome::Good, "Done");
+        bar.finish_with_message(format!("{starter}{outcome}"));
+
         // Return the args, which includes the target machines, the logged in user, and the wordlist
-        Conf {
+        Some(Conf {
             machines,
             user,
             wordlist,
-        }
+        })
     }
 
     pub fn machines(&self) -> &Vec<imd::TargetMachine> {
@@ -109,17 +132,17 @@ impl Conf {
     }
 }
 
-fn cli() -> Command {
-    let app = Command::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!());
+fn cli() -> clap::Command {
+    let app = clap::Command::new(clap::crate_name!())
+        .version(clap::crate_version!())
+        .author(clap::crate_authors!())
+        .about(clap::crate_description!());
 
     app.arg(
         Arg::new("targets")
             .short('t')
-            .long("targets")
             .value_name("IP_ADDRESS")
+            .value_parser(clap::value_parser!(IpAddr))
             .num_args(1..)
             .value_hint(ValueHint::CommandString)
             .required(true)
@@ -128,7 +151,6 @@ fn cli() -> Command {
     .arg(
         Arg::new("names")
             .short('n')
-            .long("names")
             .value_name("NAME")
             .num_args(1..)
             .value_hint(ValueHint::CommandString)
@@ -137,7 +159,6 @@ fn cli() -> Command {
     .arg(
         Arg::new("wordlist")
             .short('w')
-            .long("wordlist")
             .value_name("WORDLIST")
             .num_args(1)
             .value_hint(ValueHint::FilePath)

@@ -1,16 +1,11 @@
 use crossterm::style::{StyledContent, Stylize};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use nix::unistd::{chown, Gid, Uid};
+use nix::unistd::{self, Gid, Uid};
 use std::error::Error;
 use std::fs::File;
-use std::net::IpAddr;
+use std::io::Write;
 use std::process::Command;
-
-enum Color {
-    Green,
-    Red,
-    Yellow,
-}
+use std::sync::Arc;
 
 pub enum IMDOutcome {
     Bad,
@@ -18,37 +13,60 @@ pub enum IMDOutcome {
     Neutral,
 }
 
-pub enum PingResult {
-    Good,
-    Bad,
-}
-
 #[derive(Clone)]
 pub struct TargetMachine {
     hostname: Option<String>,
-    ip_address: IpAddr,
-    web_target: String,
+    ip_address: String,
+    mp: Arc<MultiProgress>,
+    print_pad: usize,
 }
 
 impl TargetMachine {
+    pub fn new(
+        hostname: Option<String>,
+        ip_address: String,
+        mp: Arc<MultiProgress>,
+        print_pad: usize,
+    ) -> TargetMachine {
+        TargetMachine {
+            hostname,
+            ip_address,
+            mp,
+            print_pad,
+        }
+    }
+
+    pub fn add_new_bar(&self) -> ProgressBar {
+        let bar = self.mp.add(ProgressBar::new(0));
+        let style = ProgressStyle::with_template("{msg}").unwrap();
+        bar.set_style(style);
+        bar
+    }
+
+    pub fn discovery(&self) {
+    }
+
+    pub fn format_command_start(&self, text: &str) -> String {
+        format!(
+            "{ip_address: <pad_length$}- {text}",
+            ip_address = self.ip_address,
+            pad_length = self.print_pad,
+        )
+    }
+
     pub fn hostname(&self) -> &Option<String> {
         &self.hostname
     }
 
-    pub fn ip_address(&self) -> &IpAddr {
+    pub fn ip_address(&self) -> &str {
         &self.ip_address
     }
 
-    pub fn new(hostname: Option<String>, ip_address: IpAddr, web_target: String) -> TargetMachine {
-        TargetMachine {
-            hostname,
-            ip_address,
-            web_target,
+    pub fn web_target(&self) -> String {
+        match &self.hostname {
+            Some(hostname) => hostname.to_string(),
+            None => self.ip_address().to_string(),
         }
-    }
-
-    pub fn web_target(&self) -> &String {
-        &self.web_target
     }
 }
 
@@ -124,13 +142,29 @@ impl DiscoveryArgs {
 }
 
 pub fn change_owner(object: &str, new_owner: &IMDUser) -> Result<(), Box<dyn Error>> {
-    chown(object, Some(*new_owner.uid()), Some(*new_owner.gid()))?;
+    unistd::chown(object, Some(*new_owner.uid()), Some(*new_owner.gid()))?;
     Ok(())
 }
 
-pub fn create_file(user: &IMDUser, filename: &str) -> Result<File, Box<dyn Error>> {
+pub fn create_file(
+    user: &IMDUser,
+    filename: &str,
+    _command: &str,
+    bar: &ProgressBar,
+    starter: &str,
+) -> Result<File, Box<dyn Error>> {
     // Create the desired file
-    let f = File::create(filename)?;
+    let f = match File::create(filename) {
+        Err(err) => {
+            let message = format_command_result(
+                &IMDOutcome::Bad,
+                "Problem creating file for the output of the {_command} command",
+            );
+            bar.finish_with_message(format!("{starter}{message}"));
+            return Err(Box::new(err));
+        }
+        Ok(f) => f,
+    };
 
     // Change ownership of the file to the logged in user from Args
     change_owner(filename, user)?;
@@ -138,21 +172,30 @@ pub fn create_file(user: &IMDUser, filename: &str) -> Result<File, Box<dyn Error
     Ok(f)
 }
 
-fn color_text(text: &str, color: Color) -> StyledContent<&str> {
-    match color {
-        Color::Green => text.green(),
-        Color::Red => text.red(),
-        Color::Yellow => text.yellow(),
-    }
-}
-
-fn format_ip_address(ip_address: &str) -> String {
-    format!("{ip_address: <16}- ")
-}
-
-pub fn get_command_output(command: &str, args: Vec<&str>) -> Result<String, Box<dyn Error>> {
-    let out = Command::new(command).args(args).output()?;
-    let out = String::from_utf8(out.stdout)?;
+pub fn get_command_output(
+    command: &str,
+    args: Vec<&str>,
+    bar: &ProgressBar,
+    starter: &str,
+) -> Result<String, Box<dyn Error>> {
+    let out = match Command::new(command).args(args).output() {
+        Err(err) => {
+            let message = format!("Problem running {command} command");
+            let message = format_command_result(&IMDOutcome::Bad, &message);
+            bar.finish_with_message(format!("{starter}{message}"));
+            return Err(Box::new(err));
+        }
+        Ok(out) => out,
+    };
+    let out = match String::from_utf8(out.stdout) {
+        Err(err) => {
+            let message = format!("Problem parsing {command} output");
+            let message = format_command_result(&IMDOutcome::Bad, &message);
+            bar.finish_with_message(format!("{starter}{message}"));
+            return Err(Box::new(err));
+        }
+        Ok(out) => out,
+    };
 
     Ok(out)
 }
@@ -164,16 +207,19 @@ pub fn add_new_bar(bars_container: &MultiProgress) -> ProgressBar {
     bar
 }
 
-pub fn make_message_starter(ip_address: &str, content: &str) -> String {
-    let formatted_ip = format_ip_address(ip_address);
-    format!("{formatted_ip}{content} ")
+// NOTE: this will possibly move to be within a TargetMachine or other struct
+pub fn format_command_start(ip_address: &str, pad_length: usize, text: &str) -> String {
+    format!(
+        "{ip_address: <pad_length$}- {text}",
+        pad_length = pad_length,
+    )
 }
 
-pub fn report(outcome: &IMDOutcome, text: &str) -> String {
-    let (text, color) = match outcome {
-        IMDOutcome::Bad => (format!("✕ {text}"), Color::Red),
-        IMDOutcome::Good => (format!("✔️ {text}"), Color::Green),
-        IMDOutcome::Neutral => (format!("~ {text}"), Color::Yellow),
-    };
-    color_text(&text, color).to_string()
+// NOTE: this will possibly move to be within a TargetMachine or other struct
+pub fn format_command_result(outcome: &IMDOutcome, text: &str) -> StyledContent<String> {
+    match outcome {
+        IMDOutcome::Bad => format!("✕ {text}").red(),
+        IMDOutcome::Good => format!("✔️ {text}").green(),
+        IMDOutcome::Neutral => format!("~ {text}").yellow(),
+    }
 }

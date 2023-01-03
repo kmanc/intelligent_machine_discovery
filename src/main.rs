@@ -1,26 +1,33 @@
 mod conf;
-mod drives;
+use conf::Conf;
+/*mod drives;
 mod ping;
 mod ports;
 mod utils;
-mod web;
-use indicatif::MultiProgress;
-use std::sync::Arc;
+mod web;*/
 use std::thread;
 
 fn main() {
     // Parse command line arguments and proceed if successful
-    let conf = conf::Conf::init();
-    post_main(&conf);
+    if let Some(conf) = Conf::init(){
+        post_main(&conf);
+    }
 }
 
-fn post_main(conf: &conf::Conf) {
-    // Create multiprogress bar to house all of the individual bars that update status
-    let bars_container = MultiProgress::new();
-
+fn post_main(conf: &Conf) {
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
-    let mut threads = vec![];
+    let mut threads: Vec<_> = vec![];
 
+    for machine in conf.machines().iter() {
+        let machine_clone = machine.clone();
+        threads.push(thread::spawn(move || machine_clone.discovery()));
+    }
+
+    for thread in threads {
+        thread.join().unwrap();
+    }
+
+    /*
     // Run the discovery function on each of the target machines in its own thread
     for machine in conf.machines().iter() {
         let discovery_args = imd::DiscoveryArgs::new(
@@ -37,16 +44,20 @@ fn post_main(conf: &conf::Conf) {
     for thread in threads {
         thread.join().unwrap();
     }
+    */
 
     println!("Discovery completed for all target machines");
 }
 
+/*
 fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) {
     // Make sure that the target machine is reachable
     match ping::verify_connection(&args_bundle.clone()) {
-        imd::PingResult::Bad => return,
-        imd::PingResult::Good => {}
+        imd::IMDOutcome::Bad => return,
+        imd::IMDOutcome::Good | imd::IMDOutcome::Neutral => {}
     }
+
+    /*
 
     // If the target machine has a hostname, add it to the /etc/hosts file
     if args_bundle.machine().hostname().is_some() {
@@ -106,4 +117,7 @@ fn discovery(args_bundle: &Arc<imd::DiscoveryArgs>) {
     for thread in threads {
         thread.join().unwrap();
     }
+
+    */
 }
+*/

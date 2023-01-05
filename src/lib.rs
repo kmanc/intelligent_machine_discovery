@@ -1,3 +1,5 @@
+mod commands;
+use crate::commands::Runnable;
 use crossterm::style::{StyledContent, Stylize};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nix::unistd::{self, Gid, Uid};
@@ -15,24 +17,24 @@ pub enum IMDOutcome {
 
 #[derive(Clone)]
 pub struct TargetMachine {
+    bar_prefix: String,
     hostname: Option<String>,
     ip_address: String,
     mp: Arc<MultiProgress>,
-    print_pad: usize,
 }
 
 impl TargetMachine {
     pub fn new(
+        bar_prefix: String,
         hostname: Option<String>,
         ip_address: String,
         mp: Arc<MultiProgress>,
-        print_pad: usize,
     ) -> TargetMachine {
         TargetMachine {
+            bar_prefix,
             hostname,
             ip_address,
             mp,
-            print_pad,
         }
     }
 
@@ -44,14 +46,12 @@ impl TargetMachine {
     }
 
     pub fn discovery(&self) {
-    }
-
-    pub fn format_command_start(&self, text: &str) -> String {
-        format!(
-            "{ip_address: <pad_length$}- {text}",
-            ip_address = self.ip_address,
-            pad_length = self.print_pad,
-        )
+        let ping_args = vec!["-c", "4", self.ip_address()];
+        //let bar = self.add_new_bar();
+        let ping = commands::DiscoveryCommand::new("ping", ping_args);
+        //bar.set_message(format!("{} pinging", self.bar_prefix.clone()));
+        ping.run_with_progress(ping.cli(), ping.args(), self.add_new_bar());
+        //bar.finish_with_message(format!("{}DONE", self.bar_prefix.clone()))
     }
 
     pub fn hostname(&self) -> &Option<String> {
@@ -95,109 +95,84 @@ impl IMDUser {
     }
 }
 
-pub struct DiscoveryArgs {
-    bars_container: MultiProgress,
-    machine: TargetMachine,
-    user: IMDUser,
-    wordlist: String,
+pub struct DiscoveryCommand<'a> {
+    os_command: &'a str,
+    os_command_args: Vec<&'a str>,
+    out_file: Option<&'a str>,
 }
 
-impl DiscoveryArgs {
-    pub fn add_new_bar(&self) -> ProgressBar {
-        let bar = self.bars_container.add(ProgressBar::new(0));
-        let style = ProgressStyle::with_template("{msg}").unwrap();
-        bar.set_style(style);
-        bar
-    }
-
-    pub fn bars_container(&self) -> &MultiProgress {
-        &self.bars_container
-    }
-
-    pub fn machine(&self) -> &TargetMachine {
-        &self.machine
-    }
-
-    pub fn new(
-        bars_container: MultiProgress,
-        machine: TargetMachine,
-        user: IMDUser,
-        wordlist: String,
-    ) -> DiscoveryArgs {
-        DiscoveryArgs {
-            bars_container,
-            machine,
-            user,
-            wordlist,
+impl DiscoveryCommand<'_> {
+    pub fn new<'a>(
+        os_command: &'a str,
+        os_command_args: Vec<&'a str>,
+        out_file: Option<&'a str>,
+    ) -> DiscoveryCommand<'a> {
+        DiscoveryCommand {
+            os_command_args,
+            os_command,
+            out_file,
         }
     }
 
-    pub fn user(&self) -> &IMDUser {
-        &self.user
+    /*
+    pub fn output_to_file(&self, file_owner: &IMDUser) {
+        if let Ok(command_output) = self.run() {
+            let mut f = match create_file_owned_by(self.out_file.as_ref().unwrap(), &file_owner) {
+                Err(_) => {
+                    let postfix = format!(
+                        "Problem creating a file for the output of the `{}` command",
+                        self.os_command
+                    );
+                    let postfix = format_command_result(&IMDOutcome::Bad, &postfix);
+                    self.bar
+                        .finish_with_message(format!("{}{postfix}", self.prefix));
+                    return;
+                }
+                Ok(f) => f,
+            };
+            if writeln!(f, "{command_output}").is_err() {
+                let postfix = format!(
+                    "Problem writing results of the `{}` command to '{}'",
+                    self.os_command,
+                    self.out_file.as_ref().unwrap()
+                );
+                let postfix = format_command_result(&IMDOutcome::Bad, &postfix);
+                self.bar
+                    .finish_with_message(format!("{}{postfix}", self.prefix));
+                return;
+            }
+        };
     }
 
-    pub fn wordlist(&self) -> &String {
-        &self.wordlist
+    pub fn output_to_string(&self) -> Option<String> {
+        self.bar.set_message(self.prefix.clone());
+        let output = match self.run() {
+            Err(_) => {
+                let postfix = format!("Problem running the `{}` command", self.os_command);
+                let postfix = format_command_result(&IMDOutcome::Bad, &postfix);
+                self.bar
+                    .finish_with_message(format!("{}{postfix}", self.prefix));
+                return None;
+            }
+            Ok(output) => output,
+        };
+        let postfix = format_command_result(&IMDOutcome::Good, "Done");
+        self.bar
+            .finish_with_message(format!("{}{postfix}", self.prefix));
+
+        Some(output)
     }
+    */
 }
 
-pub fn change_owner(object: &str, new_owner: &IMDUser) -> Result<(), Box<dyn Error>> {
-    unistd::chown(object, Some(*new_owner.uid()), Some(*new_owner.gid()))?;
-    Ok(())
-}
-
-pub fn create_file(
-    user: &IMDUser,
-    filename: &str,
-    _command: &str,
-    bar: &ProgressBar,
-    starter: &str,
-) -> Result<File, Box<dyn Error>> {
+pub fn create_file_owned_by(filename: &str, user: &IMDUser) -> Result<File, Box<dyn Error>> {
     // Create the desired file
-    let f = match File::create(filename) {
-        Err(err) => {
-            let message = format_command_result(
-                &IMDOutcome::Bad,
-                "Problem creating file for the output of the {_command} command",
-            );
-            bar.finish_with_message(format!("{starter}{message}"));
-            return Err(Box::new(err));
-        }
-        Ok(f) => f,
-    };
+    let f = File::create(filename)?;
 
-    // Change ownership of the file to the logged in user from Args
-    change_owner(filename, user)?;
+    // Change ownership of the file to the logged in user that was grabbed in the Conf
+    unistd::chown(filename, Some(*user.uid()), Some(*user.gid()))?;
 
     Ok(f)
-}
-
-pub fn get_command_output(
-    command: &str,
-    args: Vec<&str>,
-    bar: &ProgressBar,
-    starter: &str,
-) -> Result<String, Box<dyn Error>> {
-    let out = match Command::new(command).args(args).output() {
-        Err(err) => {
-            let message = format!("Problem running {command} command");
-            let message = format_command_result(&IMDOutcome::Bad, &message);
-            bar.finish_with_message(format!("{starter}{message}"));
-            return Err(Box::new(err));
-        }
-        Ok(out) => out,
-    };
-    let out = match String::from_utf8(out.stdout) {
-        Err(err) => {
-            let message = format!("Problem parsing {command} output");
-            let message = format_command_result(&IMDOutcome::Bad, &message);
-            bar.finish_with_message(format!("{starter}{message}"));
-            return Err(Box::new(err));
-        }
-        Ok(out) => out,
-    };
-
-    Ok(out)
 }
 
 pub fn add_new_bar(bars_container: &MultiProgress) -> ProgressBar {
@@ -216,10 +191,10 @@ pub fn format_command_start(ip_address: &str, pad_length: usize, text: &str) -> 
 }
 
 // NOTE: this will possibly move to be within a TargetMachine or other struct
-pub fn format_command_result(outcome: &IMDOutcome, text: &str) -> StyledContent<String> {
+pub fn format_command_result(outcome: &IMDOutcome, context: &str) -> StyledContent<String> {
     match outcome {
-        IMDOutcome::Bad => format!("✕ {text}").red(),
-        IMDOutcome::Good => format!("✔️ {text}").green(),
-        IMDOutcome::Neutral => format!("~ {text}").yellow(),
+        IMDOutcome::Bad => format!("✕ {context}").red(),
+        IMDOutcome::Good => format!("✔️ {context}").green(),
+        IMDOutcome::Neutral => format!("〰 {context}").yellow(),
     }
 }

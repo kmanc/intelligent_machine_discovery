@@ -87,11 +87,12 @@ impl Conf {
 
         // Add all the IP addresses to the target machine list with the associates hostnames (if any)
         for (ip_address, name) in iter::zip(ip_addresses, names) {
+            let bar_prefix = format_prefix(&ip_address, print_pad);
             machines.push(imd::TargetMachine::new(
+                bar_prefix,
                 name,
                 ip_address,
                 mp.clone(),
-                print_pad,
             ))
         }
 
@@ -165,4 +166,8 @@ fn cli() -> clap::Command {
             .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
             .help("Wordlist for web discovery"),
     )
+}
+
+fn format_prefix(ip_address: &str, print_pad: usize) -> String {
+    format!("{ip_address: <pad_length$}- ", pad_length = print_pad,)
 }

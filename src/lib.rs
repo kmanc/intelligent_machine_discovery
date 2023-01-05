@@ -1,6 +1,4 @@
 mod commands;
-use crate::commands::Runnable;
-use crossterm::style::{StyledContent, Stylize};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nix::unistd::{self, Gid, Uid};
 use std::error::Error;
@@ -8,12 +6,6 @@ use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 use std::sync::Arc;
-
-pub enum IMDOutcome {
-    Bad,
-    Good,
-    Neutral,
-}
 
 #[derive(Clone)]
 pub struct TargetMachine {
@@ -50,7 +42,14 @@ impl TargetMachine {
         //let bar = self.add_new_bar();
         let ping = commands::DiscoveryCommand::new("ping", ping_args);
         //bar.set_message(format!("{} pinging", self.bar_prefix.clone()));
-        ping.run_with_progress(ping.cli(), ping.args(), self.add_new_bar());
+        let message = format!("{} Verifying connectivity", self.bar_prefix);
+        let ping_failures = vec!["100% packet loss", "100.0% packet loss"];
+        ping.run_custom_failure_with_progress(
+            self.add_new_bar(),
+            &message,
+            ping_failures,
+            commands::DiscoveryError::Connection,
+        );
         //bar.finish_with_message(format!("{}DONE", self.bar_prefix.clone()))
     }
 
@@ -180,21 +179,4 @@ pub fn add_new_bar(bars_container: &MultiProgress) -> ProgressBar {
     let style = ProgressStyle::with_template("{msg}").unwrap();
     bar.set_style(style);
     bar
-}
-
-// NOTE: this will possibly move to be within a TargetMachine or other struct
-pub fn format_command_start(ip_address: &str, pad_length: usize, text: &str) -> String {
-    format!(
-        "{ip_address: <pad_length$}- {text}",
-        pad_length = pad_length,
-    )
-}
-
-// NOTE: this will possibly move to be within a TargetMachine or other struct
-pub fn format_command_result(outcome: &IMDOutcome, context: &str) -> StyledContent<String> {
-    match outcome {
-        IMDOutcome::Bad => format!("✕ {context}").red(),
-        IMDOutcome::Good => format!("✔️ {context}").green(),
-        IMDOutcome::Neutral => format!("〰 {context}").yellow(),
-    }
 }

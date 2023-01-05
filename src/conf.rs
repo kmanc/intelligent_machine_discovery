@@ -1,5 +1,5 @@
 use clap::{self, Arg, ValueHint};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use nix::unistd::{Gid, Uid, User};
 use std::iter;
 use std::net::IpAddr;
@@ -23,22 +23,9 @@ impl Conf {
         // Create a multiprogress container for printing things to
         let mp = Arc::new(MultiProgress::new());
 
-        // Create a bar for validating the inputs that clap can't
-        let bar = mp.add(ProgressBar::new(0));
-        let style = ProgressStyle::with_template("{msg}").unwrap();
-        bar.set_style(style);
-
-        // Inform user that inputs are being validated
-        let starter = "Validating imd configuration ";
-        bar.set_message(starter);
-
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
         if !Uid::effective().is_root() {
-            let outcome = imd::format_command_result(
-                &imd::IMDOutcome::Bad,
-                "imd must be run with root permissions, please try running 'sudo !!'",
-            );
-            bar.finish_with_message(format!("{starter}{outcome}"));
+            println!("imd must be run with root permissions, please try running 'sudo !!'");
             return None;
         }
 
@@ -101,16 +88,9 @@ impl Conf {
 
         // Make sure the path is a real file on the user's drive
         if !Path::new(&wordlist).exists() {
-            let outcome = imd::format_command_result(
-                &imd::IMDOutcome::Bad,
-                &format!("'{wordlist}' is not a valid filepath "),
-            );
-            bar.finish_with_message(format!("{starter}{outcome}"));
+            println!("'{wordlist}' is not a valid filepath");
             return None;
         }
-
-        let outcome = imd::format_command_result(&imd::IMDOutcome::Good, "Done");
-        bar.finish_with_message(format!("{starter}{outcome}"));
 
         // Return the args, which includes the target machines, the logged in user, and the wordlist
         Some(Conf {
@@ -169,5 +149,5 @@ fn cli() -> clap::Command {
 }
 
 fn format_prefix(ip_address: &str, print_pad: usize) -> String {
-    format!("{ip_address: <pad_length$}- ", pad_length = print_pad,)
+    format!("{ip_address: <pad_length$}-", pad_length = print_pad,)
 }

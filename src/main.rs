@@ -13,11 +13,16 @@ fn post_main(conf: &Conf) {
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
     let mut threads: Vec<_> = vec![];
 
+    // Run each machine's discovery in its own thread
     for machine in conf.machines().iter() {
         let machine_clone = machine.clone();
-        threads.push(thread::spawn(move || machine_clone.discovery()));
+        threads.push(thread::spawn({
+            let user = conf.user();
+            move || machine_clone.discovery(&user)
+        }));
     }
 
+    // Force wait until all machines are finished
     for thread in threads {
         thread.join().unwrap();
     }

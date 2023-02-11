@@ -6,14 +6,12 @@ use std::process::Command;
 
 #[derive(Debug)]
 pub enum DiscoveryError {
-    AlreadyInHost,
     Connection,
 }
 
 impl DiscoveryError {
     pub fn as_str(&self) -> &'static str {
         match self {
-            DiscoveryError::AlreadyInHost => "Entry already in '/etc/hosts'",
             DiscoveryError::Connection => "Could not connect to host",
         }
     }
@@ -27,30 +25,43 @@ impl fmt::Display for DiscoveryError {
 
 impl Error for DiscoveryError {}
 
-pub struct DiscoveryCommand<'a> {
-    cli: &'a str,
-    args: Vec<&'a str>,
+pub enum DiscoveryCommand {
+    NmapAllTCP,
+    Ping,
 }
 
-impl DiscoveryCommand<'_> {
-    pub fn new<'a>(cli: &'a str, args: Vec<&'a str>) -> DiscoveryCommand<'a> {
-        DiscoveryCommand { cli, args }
+impl DiscoveryCommand {
+    fn args<'a>(&'a self, target: &'a str) -> Vec<&str> {
+        match self {
+            DiscoveryCommand::Ping => vec!["-c", "4", target],
+            DiscoveryCommand::NmapAllTCP => todo!(),
+        }
     }
 
-    pub fn run(&self) -> Result<String, Box<dyn Error>> {
+    fn cli(&self) -> &str {
+        match self {
+            DiscoveryCommand::Ping => "ping",
+            DiscoveryCommand::NmapAllTCP => todo!(),
+        }
+    }
+
+    fn command(&self, target: &str) -> Result<String, Box<dyn Error>> {
         Ok(String::from_utf8(
-            Command::new(self.cli).args(&self.args).output()?.stdout,
+            Command::new(self.cli())
+                .args(self.args(target))
+                .output()?
+                .stdout,
         )?)
     }
 
-    pub fn run_custom_failure(
+    fn command_custom_failure(
         &self,
-        failures: Vec<&str>,
+        target: &str,
         how_to_fail: DiscoveryError,
     ) -> Result<String, Box<dyn Error>> {
-        let output = self.run()?;
+        let output = self.command(target)?;
 
-        for failure in &failures {
+        for failure in &self.failures() {
             if output.contains(failure) {
                 return Err(Box::new(how_to_fail));
             }
@@ -59,31 +70,15 @@ impl DiscoveryCommand<'_> {
         Ok(output)
     }
 
-    pub fn run_with_progress(&self, bar: ProgressBar, prefix: &str) -> String {
-        bar.set_message(prefix.to_string());
-        match self.run() {
-            Ok(output) => {
-                let postfix = "✔️ Done".to_string().green();
-                bar.finish_with_message(format!("{prefix} {postfix}"));
-                output
-            }
-            Err(_) => {
-                let postfix = format!("✕ Problem running '{}' command", self.cli).red();
-                bar.finish_with_message(format!("{prefix} {postfix}"));
-                String::new()
-            }
-        }
-    }
-
-    pub fn run_custom_failure_with_progress(
+    fn command_custom_failure_with_progress(
         &self,
+        target: &str,
         bar: ProgressBar,
         prefix: &str,
-        failures: Vec<&str>,
         how_to_fail: DiscoveryError,
     ) -> String {
         bar.set_message(prefix.to_string());
-        match self.run_custom_failure(failures, how_to_fail) {
+        match self.command_custom_failure(target, how_to_fail) {
             Ok(output) => {
                 let postfix = "✔️ Done".to_string().green();
                 bar.finish_with_message(format!("{prefix} {postfix}"));
@@ -95,17 +90,52 @@ impl DiscoveryCommand<'_> {
                     bar.finish_with_message(format!("{prefix} {postfix}"));
                     String::new()
                 }
-                Some(DiscoveryError::AlreadyInHost) => {
+                Some(_) => {
                     let postfix = format!("〰 {err}").yellow();
                     bar.finish_with_message(format!("{prefix} {postfix}"));
                     String::new()
-                },
+                }
                 None => {
-                    let postfix = format!("✕ Problem running '{}' command", self.cli).red();
+                    let postfix = format!("✕ Problem running '{}' command", self.cli()).red();
                     bar.finish_with_message(format!("{prefix} {postfix}"));
                     String::new()
                 }
             },
+        }
+    }
+
+    fn command_with_progress(&self, target: &str, bar: ProgressBar, prefix: &str) -> String {
+        bar.set_message(prefix.to_string());
+        match self.command(target) {
+            Ok(output) => {
+                let postfix = "✔️ Done".to_string().green();
+                bar.finish_with_message(format!("{prefix} {postfix}"));
+                output
+            }
+            Err(_) => {
+                let postfix = format!("✕ Problem running '{}' command", self.cli()).red();
+                bar.finish_with_message(format!("{prefix} {postfix}"));
+                String::new()
+            }
+        }
+    }
+
+    fn failures(&self) -> Vec<&str> {
+        match self {
+            DiscoveryCommand::Ping => vec!["100% packet loss", "100.0% packet loss"],
+            DiscoveryCommand::NmapAllTCP => todo!(),
+        }
+    }
+
+    pub fn run(&self, target: &str, bar: ProgressBar, prefix: &str) -> String {
+        match self {
+            DiscoveryCommand::Ping => self.command_custom_failure_with_progress(
+                target,
+                bar,
+                prefix,
+                DiscoveryError::Connection,
+            ),
+            _ => String::new(),
         }
     }
 }

@@ -4,28 +4,21 @@ use std::thread;
 
 fn main() {
     // Parse command line arguments and proceed if successful
-    if let Some(conf) = Conf::init() {
-        post_main(&conf);
-    }
-}
+    let conf = Conf::init();
 
-fn post_main(conf: &Conf) {
     // Create a vector for threads. Each will be responsible for one target machine, and will likely spawn its own threads
-    let mut threads: Vec<_> = vec![];
+    let mut threads: Vec<std::thread::JoinHandle<()>> = vec![];
 
-    // Run each machine's discovery in its own thread
-    for machine in conf.machines().iter() {
-        let machine_clone = machine.clone();
-        threads.push(thread::spawn({
-            let user = conf.user();
-            move || machine_clone.discovery(&user)
-        }));
+    for machine in conf.target_machines().iter() {
+        let machine = machine.clone();
+        let user = conf.user();
+        let wordlist = conf.wordlist();
+        threads.push(thread::spawn(move || machine.discovery(user, wordlist)));
     }
 
-    // Force wait until all machines are finished
     for thread in threads {
         thread.join().unwrap();
     }
 
-    println!("Discovery completed for all target machines");
+    println!("Discovery for all target machines is complete");
 }

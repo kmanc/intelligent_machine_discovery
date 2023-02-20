@@ -143,7 +143,7 @@ impl TargetMachine {
         user: Arc<IMDUser>,
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
-        let message = self.prefix.clone() + " Creating directory to store results in";
+        let message = self.prefix.clone() + " Directory to store results in";
         bar.set_message(message.clone());
 
         // If it fails, it's probably because the directory already exists (not 100%, but pretty likely), so report that and move on
@@ -255,7 +255,7 @@ impl TargetMachine {
         user: Arc<IMDUser>,
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
-        let message = self.prefix.clone() + " Scanning all TCP ports: 'nmap -p- -Pn'";
+        let message = self.prefix.clone() + " All TCP ports: 'nmap -p- -Pn'";
         bar.set_message(message.clone());
 
         let args = vec!["-p-", "-Pn", ip_string];
@@ -279,7 +279,7 @@ impl TargetMachine {
     ) -> Result<String, Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
         let message = self.prefix.clone()
-            + " Scanning common TCP ports: 'nmap -sV -Pn --script (a few useful scripts)'";
+            + " Common TCP ports: 'nmap -sV -Pn --script (scripts)'";
         bar.set_message(message.clone());
 
         let args = vec![
@@ -381,7 +381,7 @@ impl TargetMachine {
         user: Arc<IMDUser>,
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
-        let message = self.prefix.clone() + " Scanning network drives: 'showmount -e'";
+        let message = self.prefix.clone() + " Network drives: 'showmount -e'";
         bar.set_message(message.clone());
 
         let args = vec!["-e", ip_string];
@@ -407,7 +407,7 @@ impl TargetMachine {
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
         let message = self.prefix.clone()
-            + &format!(" Scanning web presence on port {port}: 'feroxbuster -q --thorough --time-limit 10m'");
+            + &format!(" Port {port} web: 'feroxbuster -q --thorough'");
         bar.set_message(message.clone());
 
         let web_target = self.web_target();
@@ -455,7 +455,7 @@ impl TargetMachine {
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
         let message = self.prefix.clone()
-            + &format!(" Scanning web vulns on port {port}: 'nikto -host -maxtime 60'");
+            + &format!(" Port {port} vulns: 'nikto -host'");
         bar.set_message(message.clone());
 
         let web_target = self.web_target();

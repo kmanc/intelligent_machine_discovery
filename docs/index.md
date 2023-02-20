@@ -31,6 +31,8 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
     2. [nikto](https://cirt.net/Nikto2) installed
     3. [nmap](https://nmap.org/) installed
     4. [showmount](https://linux.die.net/man/8/showmount) installed
+    5. The file `/usr/share/wordlists/seclists/Discovery/Web-Content/raft-medium-directories.txt`
+        - You don't actually have to use this file but for (hand waving) reasons it will have to exist. It can be empty if you'd prefer to use your own wordlist
 
 ![setup](https://user-images.githubusercontent.com/14863147/184455461-5726cad6-be82-4cdd-a09d-b818bf33e4f5.gif)
 
@@ -38,11 +40,10 @@ It is the evolution of a shell script I wrote for my [OSCP exam](https://www.off
 ## Use
 
 ```
-sudo imd -t IP_ADDRESS_1 IP_ADDRESS_2 ... -n HOSTNAME_1 HOSTNAME_2 ... -w WORDLIST
+sudo imd -t IP_ADDRESS_1[=hostname] IP_ADDRESS_2[=hostname] ... -w WORDLIST
 ```
 
-
-![imd](https://user-images.githubusercontent.com/14863147/184567581-588a5226-7814-438e-9884-4b1252c9cd0c.gif)
+![vmrc_1PkTEcPKDF](https://user-images.githubusercontent.com/14863147/220037569-e675e8f7-832f-4ca9-b4c6-f860be99fec6.gif)
 
 
 As individual scans complete, you'll be able to view their output in their respective directory and file
@@ -58,7 +59,7 @@ sudo imd -t 10.10.10.215
 ```
 
 ```
-sudo imd -t 10.10.10.215 -n academy.htb
+sudo imd -t 10.10.10.215=academy.htb
 ```
 
 ```
@@ -66,7 +67,7 @@ sudo imd -t 10.10.10.215 10.10.10.216 10.10.10.217
 ```
 
 ```
-sudo imd -t 10.10.10.215 10.10.10.217 10.10.10.216 10.10.10.218 10.10.10.219 -n academy.htb cereal.htb 
+sudo imd -t 10.10.10.215=academy.htb 10.10.10.217=cereal.htb 10.10.10.216 10.10.10.218 10.10.10.219
 ```
 
 ```

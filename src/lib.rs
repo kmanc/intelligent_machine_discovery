@@ -407,7 +407,7 @@ impl TargetMachine {
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
         let message = self.prefix.clone()
-            + " Scanning web presence on port {port}: 'feroxbuster -q --thorough --time-limit 10m'";
+            + &format!(" Scanning web presence on port {port}: 'feroxbuster -q --thorough --time-limit 10m'");
         bar.set_message(message.clone());
 
         let web_target = self.web_target();
@@ -454,8 +454,8 @@ impl TargetMachine {
         port: &str,
     ) -> Result<(), Box<dyn Error>> {
         let bar = add_new_bar(self.mp());
-        let message =
-            self.prefix.clone() + " Scanning web vulns on port {port}: 'nikto -host -maxtime 60'";
+        let message = self.prefix.clone()
+            + &format!(" Scanning web vulns on port {port}: 'nikto -host -maxtime 60'");
         bar.set_message(message.clone());
 
         let web_target = self.web_target();

@@ -97,7 +97,7 @@ fn cli() -> Command {
             .value_name("WORDLIST")
             .num_args(1)
             .value_hint(ValueHint::FilePath)
-            .default_value("/Users/koins/Documents/github/rust/testing/.gitignore")
+            .default_value("/usr/share/wordlists/seclists/Discovery/Web-Content/raft-medium-directories.txt")
             .value_parser(clap::builder::ValueParser::new(imd::wrap_wordlist_parse))
             .help("Wordlist for web discovery"),
     )

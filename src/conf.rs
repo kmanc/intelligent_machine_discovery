@@ -1,132 +1,104 @@
-use clap::{crate_authors, crate_description, crate_name, crate_version, Arg, Command, ValueHint};
-use nix::unistd::{Gid, Uid, User};
-use std::env;
-use std::iter::zip;
-use std::net::IpAddr;
+use clap::{self, Arg, Command, ValueHint};
+use indicatif::MultiProgress;
 use std::sync::Arc;
 
 pub struct Conf {
-    machines: Vec<imd::TargetMachine>,
+    target_machines: Vec<imd::TargetMachine>,
     user: Arc<imd::IMDUser>,
     wordlist: Arc<String>,
 }
 
 impl Conf {
     pub fn init() -> Conf {
-        // Set up the command line arguments and their associated settings
-        let app = cli();
+        // Create a multiprogress container for printing things to throughout the running of imd
+        let mp = Arc::new(MultiProgress::new());
 
-        // Parse what the user entered
-        let matches = app.get_matches();
+        let bar = imd::add_new_bar(mp.clone());
 
         // imd must be run as root to work - ensure that's the case here, after other matching issues (if any) have been surfaced
-        if !Uid::effective().is_root() {
-            let error = imd::report_bad(
-                "imd must be run with root permissions, please try running 'sudo!!'",
-            );
-            panic!("{error}")
+        if let Err(e) = imd::effective_user() {
+            bar.finish_with_message(format!("{e}"));
+            std::process::exit(0x1);
         }
 
-        // Set an empty vec for target machines
-        let mut machines: Vec<imd::TargetMachine> = vec![];
+        // find the logged in user (probably the one running imd) in order to deal with created file permissions later
+        let user = Arc::new(imd::real_user().unwrap());
 
-        // Get the target machines parsed as IP addresses
-        let ip_addresses: Vec<_> = matches
-            .get_many::<String>("targets")
+        // Use clap to parse command line args
+        let app = cli();
+        let matches = app.get_matches();
+
+        // Collect all of the target machines into a vector
+        let target_machines: Vec<&imd::CLITarget> = matches
+            .get_many::<imd::CLITarget>("targets")
             .unwrap()
-            .map(|s| s.parse::<IpAddr>())
             .collect();
 
-        // Get the target names, or an empty vector if None
-        let mut names: Vec<_> = match matches.get_many::<String>("names") {
-            None => vec![],
-            Some(names) => names.map(|s| Some(s.to_string())).collect(),
-        };
+        // Figure out the length of the longest target machine by IP address (for printing purposes)
+        let longest_ip = target_machines
+            .clone()
+            .iter()
+            .max_by(|&x, &y| x.len().cmp(&y.len()))
+            .unwrap()
+            .len();
 
-        // Pad the names list with None until it's the same length as IP addresses
-        names.resize_with(ip_addresses.len(), || None);
+        let target_machines: Vec<imd::TargetMachine> = target_machines
+            .into_iter()
+            .map(|cli_machine| imd::TargetMachine::new(cli_machine.clone(), longest_ip, mp.clone()))
+            .collect();
 
-        // Add all the valid IP addresses to the target machine list with the associates hostnames
-        for (ip_address, name) in zip(ip_addresses, names) {
-            match ip_address {
-                Ok(ip_address) => machines.push(imd::TargetMachine::new(name, ip_address)),
-                Err(_) => {
-                    let log = imd::report_bad("Oooops, an entered IP addresses wasn't actually an IP address, skipping it");
-                    println!("{log}");
-                }
-            }
-        }
+        // Get the wordlist, which is either user-provided or a default value
+        let wordlist = Arc::new(matches.get_one::<String>("wordlist").unwrap().to_string());
 
-        // Run the who command to determine the logged in user (hopefully the person who ran imd)
-        let name = imd::get_command_output("who", [].to_vec()).unwrap();
-        let name = String::from(name.split(' ').collect::<Vec<&str>>()[0]);
+        bar.finish_with_message(format!(
+            "Starting discovery on {} target machines",
+            target_machines.len()
+        ));
 
-        // Get the user ID from the username
-        let (uid, gid) = match User::from_name(&name).unwrap() {
-            Some(user) => (user.uid, user.gid),
-            _ => (Uid::from_raw(0), Gid::from_raw(0)),
-        };
-
-        let user = imd::IMDUser::new(gid, name, uid);
-
-        // Get the wordlist, which will either be the user-provided option or the default value
-        let wordlist = matches.get_one::<String>("wordlist").unwrap().to_string();
-
-        // Return the args, which includes the target machines, the logged in user, and the wordlist
         Conf {
-            machines,
-            user: Arc::new(user),
-            wordlist: Arc::new(wordlist),
+            target_machines,
+            user,
+            wordlist,
         }
     }
 
-    pub fn machines(&self) -> &Vec<imd::TargetMachine> {
-        &self.machines
+    pub fn target_machines(&self) -> &Vec<imd::TargetMachine> {
+        &self.target_machines
     }
 
-    pub fn user(&self) -> &Arc<imd::IMDUser> {
-        &self.user
+    pub fn user(&self) -> Arc<imd::IMDUser> {
+        self.user.clone()
     }
 
-    pub fn wordlist(&self) -> &Arc<String> {
-        &self.wordlist
+    pub fn wordlist(&self) -> Arc<String> {
+        self.wordlist.clone()
     }
 }
 
 fn cli() -> Command {
-    let app = Command::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!());
+    let app = clap::Command::new(clap::crate_name!())
+        .version(clap::crate_version!())
+        .author(clap::crate_authors!())
+        .about(clap::crate_description!());
 
-    app
-        .arg(
-            Arg::new("targets")
-                .short('t')
-                .long("targets")
-                .value_name("IP_ADDRESS")
-                .num_args(1..)
-                .value_hint(ValueHint::CommandString)
-                .required(true)
-                .help("Target machine(s)'s IP address(es)"),
-        )
-        .arg(
-            Arg::new("names")
-                .short('n')
-                .long("names")
-                .value_name("NAME")
-                .num_args(1..)
-                .value_hint(ValueHint::CommandString)
-                .help("Target machine(s)'s name(s)"),
-        )
-        .arg(
-            Arg::new("wordlist")
-                .short('w')
-                .long("wordlist")
-                .value_name("WORDLIST")
-                .num_args(1)
-                .value_hint(ValueHint::FilePath)
-                .default_value("/usr/share/wordlists/seclists/raft-medium-directories.txt")
-                .help("Wordlist for web discovery"),
-        )
+    app.arg(
+        Arg::new("targets")
+            .short('t')
+            .value_name("TARGET_MACHINES")
+            .num_args(1..)
+            .required(true)
+            .value_hint(ValueHint::CommandString)
+            .value_parser(clap::builder::ValueParser::new(imd::CLITarget::new))
+            .help("Target machine(s)'s IP address(es), optionally with =hostname: E.G. 127.0.0.1 OR 127.0.0.1=myhostname")
+    )
+    .arg(
+        Arg::new("wordlist")
+            .short('w')
+            .value_name("WORDLIST")
+            .num_args(1)
+            .value_hint(ValueHint::FilePath)
+            .default_value("/usr/share/wordlists/seclists/Discovery/Web-Content/raft-medium-directories.txt")
+            .value_parser(clap::builder::ValueParser::new(imd::wrap_wordlist_parse))
+            .help("Wordlist for web discovery"),
+    )
 }

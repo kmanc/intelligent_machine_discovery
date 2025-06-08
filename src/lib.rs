@@ -4,6 +4,7 @@ use error::{PanicDiscoveryError, RecoverableDiscoveryError};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nix::unistd::{self, Gid, Uid, User};
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -170,7 +171,7 @@ impl TargetMachine {
         if self.ping(&ip_string).is_err() {
             return;
         }
-        if self.add_to_hosts(&ip_string).is_err() {}
+        let _ = self.add_to_hosts(&ip_string);
         if self.create_results_dir(&ip_string, user.clone()).is_err() {
             return;
         }
@@ -507,9 +508,7 @@ pub fn effective_user() -> Result<(), PanicDiscoveryError> {
 
 // Get the logged in user (hopefully the person who ran imd)
 pub fn real_user() -> Result<IMDUser, Box<dyn Error>> {
-    let name = Command::new("who").output()?;
-    let name = String::from_utf8(name.stdout)?;
-    let name = String::from(name.split(' ').collect::<Vec<&str>>()[0]);
+    let name = env::var("SUDO_USER").or_else(|_| env::var("USER"))?;
 
     let (uid, gid) = match User::from_name(&name)? {
         Some(user) => (user.uid, user.gid),

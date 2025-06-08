@@ -6,16 +6,17 @@ edition = "2021"
 license = "MIT"
 name = "imd"
 repository = "https://github.com/kmanc/intelligent_machine_discovery"
-version = "1.5.0"
+version = "2.0.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = ">=3.2.17", features = ["cargo"] }
+clap = { version = ">=4.0.32", features = ["cargo"] }
 crossterm = ">=0.25.0"
-indicatif = ">=0.17.0"
-nix = { version = ">=0.24.2", features = ["fs", "user"] }
+indicatif = ">=0.17.2"
+nix = { version = ">=0.26.1", features = ["fs", "user"] }
 
 [profile.release]
 lto = true
 strip = true
+panic = "abort"

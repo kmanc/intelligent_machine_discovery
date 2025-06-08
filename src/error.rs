@@ -44,7 +44,7 @@ impl RecoverableDiscoveryError {
         match self {
             RecoverableDiscoveryError::AlreadyInHost => "〰 Entry already in '/etc/hosts'".yellow(),
             RecoverableDiscoveryError::Connection => {
-                "✕ Could not ping host, skipping discovery".red()
+                "✕ Could not ping host, it might be down".red()
             }
             RecoverableDiscoveryError::DirectoryExists => "〰 Directory already exists".yellow(),
             RecoverableDiscoveryError::Services => {

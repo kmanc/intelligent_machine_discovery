@@ -168,9 +168,7 @@ impl TargetMachine {
     // Catchall method for running discovery on a target machine
     pub fn discovery(&self, user: Arc<IMDUser>, wordlist: Arc<String>) {
         let ip_string = self.ip_as_string();
-        if self.ping(&ip_string).is_err() {
-            return;
-        }
+        let _ = self.ping(&ip_string);
         let _ = self.add_to_hosts(&ip_string);
         if self.create_results_dir(&ip_string, user.clone()).is_err() {
             return;
